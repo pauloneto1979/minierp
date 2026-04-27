@@ -2,6 +2,7 @@ const STORAGE_KEY = "minierp-state-v1";
 const REMEMBERED_LOGIN_KEY = "minierp-remembered-login";
 const ACCESS_REGISTRY_KEY = "minierp-access-registry-v1";
 const DEFAULT_TENANT = "Minha Empresa LTDA";
+const DEFAULT_TENANT_DOCUMENT = "00.000.000/0001-00";
 
 const makeId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -102,7 +103,7 @@ const fields = {
   ],
   empresas: [
     { name: "nome", label: "Empresa", type: "text", required: true },
-    { name: "documento", label: "Documento", type: "text" },
+    { name: "documento", label: "CNPJ", type: "text", required: true },
     { name: "status", label: "Status", type: "select", options: ["Ativa", "Suspensa", "Inativa"] }
   ],
   usuarios: [
@@ -290,8 +291,8 @@ function fieldTemplate(field, value = "") {
     const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
     const options = relatedOptions(field.relation, "").map((option) => `
       <label class="check-field option-check">
-        <input name="${field.name}" type="checkbox" value="${escapeAttr(option)}" ${selectedValues.includes(option) ? "checked" : ""} />
-        <span>${escapeHtml(option)}</span>
+        <input name="${field.name}" type="checkbox" value="${escapeAttr(option.value || option)}" ${selectedValues.includes(option.value || option) ? "checked" : ""} />
+        <span>${escapeHtml(option.label || option)}</span>
       </label>
     `).join("");
     return `
@@ -306,7 +307,11 @@ function fieldTemplate(field, value = "") {
     const optionsSource = field.relation ? relatedOptions(field.relation, value) : field.options;
     const placeholder = field.relation ? `<option value="">Selecione</option>` : "";
     const options = optionsSource
-      .map((option) => `<option value="${escapeAttr(option)}" ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`)
+      .map((option) => {
+        const optionValue = option.value || option;
+        const optionLabel = option.label || option;
+        return `<option value="${escapeAttr(optionValue)}" ${optionValue === value ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`;
+      })
       .join("");
     return `<label class="field"><span>${field.label}</span><select name="${field.name}" ${required}>${placeholder}${options}</select></label>`;
   }
@@ -328,6 +333,9 @@ function collectFormRecord() {
 function normalizeRecord(record, module) {
   if (module === "usuarios" && (!record.empresas || !record.empresas.length)) {
     record.empresas = [];
+  }
+  if (module === "empresas") {
+    record.documento = normalizeDocument(record.documento);
   }
   if (module === "produtos") {
     record.preco = Number(record.preco || 0);
@@ -506,7 +514,7 @@ function renderUsuarios() {
   const rows = accessRegistry.usuarios.filter((item) => matches(item, query)).map((user) => `
     <tr>
       <td>${escapeHtml(user.usuario)}</td>
-      <td>${escapeHtml(userCompanies(user).join(", ") || "-")}</td>
+      <td>${escapeHtml(userCompanies(user).map(companyNameByDocument).join(", ") || "-")}</td>
       <td>${escapeHtml(user.perfil || "-")}</td>
       <td>${badge(user.status)}</td>
       <td class="align-right">${rowActions("usuarios", user.id)}</td>
@@ -549,12 +557,28 @@ function getQuery(module) {
 }
 
 function relatedOptions(module, currentValue) {
+  if (module === "empresas") {
+    return relatedCompanyOptions(currentValue);
+  }
+
   const options = getModuleCollection(module)
     .filter((item) => item.status !== "Inativo" && item.status !== "Suspenso")
     .map((item) => item.nome || item.usuario)
     .filter(Boolean);
   if (currentValue && !options.includes(currentValue)) {
     options.push(currentValue);
+  }
+  return options;
+}
+
+function relatedCompanyOptions(currentValue) {
+  const options = accessRegistry.empresas
+    .filter((company) => company.status === "Ativa")
+    .map((company) => ({ label: company.nome, value: company.documento }))
+    .filter((company) => company.value);
+  if (currentValue && !options.some((company) => company.value === currentValue)) {
+    const company = companyByDocument(currentValue);
+    options.push({ label: company?.nome || currentValue, value: currentValue });
   }
   return options;
 }
@@ -648,9 +672,17 @@ function loadAccessRegistry() {
 function migrateAccessRegistry(registry) {
   registry.empresas = Array.isArray(registry.empresas) ? registry.empresas : [];
   registry.usuarios = Array.isArray(registry.usuarios) ? registry.usuarios : [];
+  const legacyCompanyDocuments = new Map();
+  registry.empresas = registry.empresas.map((company) => {
+    const document = normalizeDocument(company.documento) || legacyCompanyDocument(company.nome);
+    legacyCompanyDocuments.set(normalizeLookup(company.nome), document);
+    return { ...company, documento: document };
+  });
   registry.usuarios = registry.usuarios.map((user) => ({
     ...user,
-    empresas: Array.isArray(user.empresas) ? user.empresas : user.empresa ? [user.empresa] : []
+    empresas: (Array.isArray(user.empresas) ? user.empresas : user.empresa ? [user.empresa] : [])
+      .map((companyRef) => companyDocumentFromReference(companyRef, legacyCompanyDocuments))
+      .filter(Boolean)
   }));
   return registry;
 }
@@ -662,7 +694,7 @@ function saveAccessRegistry() {
 function authorizeLogin(username, password) {
   if (!accessRegistry.empresas.length && !accessRegistry.usuarios.length) {
     bootstrapAccessRegistry(username, DEFAULT_TENANT, password);
-    return { allowed: true, companies: [DEFAULT_TENANT] };
+    return { allowed: true, companies: [DEFAULT_TENANT_DOCUMENT] };
   }
 
   const user = accessRegistry.usuarios.find((item) =>
@@ -674,8 +706,8 @@ function authorizeLogin(username, password) {
     return { allowed: false, message: "Usuario ou senha nao autorizados." };
   }
 
-  const companies = userCompanies(user).filter((companyName) =>
-    accessRegistry.empresas.some((company) => sameText(company.nome, companyName) && company.status === "Ativa")
+  const companies = userCompanies(user).filter((companyDocument) =>
+    accessRegistry.empresas.some((company) => sameText(company.documento, companyDocument) && company.status === "Ativa")
   );
   if (!companies.length) {
     return { allowed: false, message: "Usuario sem empresa ativa autorizada." };
@@ -687,10 +719,10 @@ function authorizeLogin(username, password) {
 function bootstrapAccessRegistry(username, tenant, password) {
   accessRegistry = {
     empresas: [
-      { id: makeId(), nome: tenant, documento: "", status: "Ativa" }
+      { id: makeId(), nome: tenant, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" }
     ],
     usuarios: [
-      { id: makeId(), usuario: username, senha: password, empresas: [tenant], perfil: "Administrador", status: "Ativo" }
+      { id: makeId(), usuario: username, senha: password, empresas: [DEFAULT_TENANT_DOCUMENT], perfil: "Administrador", status: "Ativo" }
     ]
   };
   saveAccessRegistry();
@@ -698,6 +730,34 @@ function bootstrapAccessRegistry(username, tenant, password) {
 
 function userCompanies(user) {
   return Array.isArray(user.empresas) ? user.empresas : user.empresa ? [user.empresa] : [];
+}
+
+function companyByDocument(document) {
+  return accessRegistry.empresas.find((company) => sameText(company.documento, document));
+}
+
+function companyNameByDocument(document) {
+  return companyByDocument(document)?.nome || document;
+}
+
+function companyDocumentFromReference(reference, legacyCompanyDocuments) {
+  const normalizedReference = normalizeDocument(reference);
+  if (accessRegistry.empresas.some((company) => sameText(company.documento, normalizedReference))) {
+    return normalizedReference;
+  }
+  return legacyCompanyDocuments.get(normalizeLookup(reference)) || normalizedReference;
+}
+
+function legacyCompanyDocument(companyName) {
+  return `LEGADO-${tenantKey(companyName).toUpperCase()}`;
+}
+
+function normalizeDocument(document) {
+  return String(document || "").trim();
+}
+
+function normalizeLookup(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function sameText(left, right) {
@@ -732,8 +792,9 @@ function loadRememberedLogin() {
 }
 
 function setTenant(tenantName) {
-  activeTenant = tenantName;
-  activeTenantKey = tenantKey(tenantName);
+  const company = companyByDocument(tenantName);
+  activeTenant = company?.nome || tenantName;
+  activeTenantKey = tenantKey(company?.documento || tenantName);
   state = loadState();
   setView("dashboard");
   render();
@@ -771,7 +832,7 @@ function showApp() {
 
 function showTenantSelection(companies) {
   tenantSelect.innerHTML = companies
-    .map((company) => `<option value="${escapeAttr(company)}">${escapeHtml(company)}</option>`)
+    .map((companyDocument) => `<option value="${escapeAttr(companyDocument)}">${escapeHtml(companyNameByDocument(companyDocument))}</option>`)
     .join("");
   tenantError.textContent = "";
   loginScreen.classList.add("is-hidden");
