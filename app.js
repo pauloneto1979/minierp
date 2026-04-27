@@ -26,12 +26,12 @@ const initialAccessRegistry = {
 const demoState = {
   clientes: [
     { id: makeId(), nome: "Ana Souza", documento: "123.456.789-00", telefone: "(11) 98888-1010", cidade: "Sao Paulo", status: "Ativo" },
-    { id: makeId(), nome: "Mercado Central", documento: "12.345.678/0001-90", telefone: "(21) 3333-4400", cidade: "Rio de Janeiro", status: "Ativo" },
-    { id: makeId(), nome: "Oficina Lima", documento: "98.765.432/0001-10", telefone: "(31) 3444-9000", cidade: "Belo Horizonte", status: "Prospect" }
+    { id: makeId(), nome: "Mercado Central", documento: "12.345.678/0001-95", telefone: "(21) 3333-4400", cidade: "Rio de Janeiro", status: "Ativo" },
+    { id: makeId(), nome: "Oficina Lima", documento: "45.723.174/0001-10", telefone: "(31) 3444-9000", cidade: "Belo Horizonte", status: "Prospect" }
   ],
   fornecedores: [
-    { id: makeId(), nome: "Imobiliaria Centro", documento: "22.333.444/0001-55", telefone: "(11) 3000-1000", cidade: "Sao Paulo", status: "Ativo" },
-    { id: makeId(), nome: "Operadora Fibra", documento: "33.444.555/0001-66", telefone: "(11) 4000-2020", cidade: "Campinas", status: "Ativo" }
+    { id: makeId(), nome: "Imobiliaria Centro", documento: "04.252.011/0001-10", telefone: "(11) 3000-1000", cidade: "Sao Paulo", status: "Ativo" },
+    { id: makeId(), nome: "Operadora Fibra", documento: "11.222.333/0001-81", telefone: "(11) 4000-2020", cidade: "Campinas", status: "Ativo" }
   ],
   produtos: [
     { id: makeId(), nome: "Cadeira Operacional", categoria: "Moveis", preco: 420, estoque: 8, status: "Ativo" },
@@ -61,14 +61,14 @@ demoState.contasPagar = [
 const fields = {
   clientes: [
     { name: "nome", label: "Nome", type: "text", required: true },
-    { name: "documento", label: "Documento", type: "text", required: true },
+    { name: "documento", label: "CNPJ", type: "text", required: true, cnpj: true },
     { name: "telefone", label: "Telefone", type: "text" },
     { name: "cidade", label: "Cidade", type: "text" },
     { name: "status", label: "Status", type: "select", options: ["Ativo", "Prospect", "Inativo"] }
   ],
   fornecedores: [
     { name: "nome", label: "Nome", type: "text", required: true },
-    { name: "documento", label: "Documento", type: "text", required: true },
+    { name: "documento", label: "CNPJ", type: "text", required: true, cnpj: true },
     { name: "telefone", label: "Telefone", type: "text" },
     { name: "cidade", label: "Cidade", type: "text" },
     { name: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso", "Inativo"] }
@@ -103,7 +103,7 @@ const fields = {
   ],
   empresas: [
     { name: "nome", label: "Empresa", type: "text", required: true },
-    { name: "documento", label: "CNPJ", type: "text", required: true },
+    { name: "documento", label: "CNPJ", type: "text", required: true, cnpj: true },
     { name: "status", label: "Status", type: "select", options: ["Ativa", "Suspensa", "Inativa"] }
   ],
   usuarios: [
@@ -134,6 +134,8 @@ let accessRegistry = loadAccessRegistry();
 let currentView = "dashboard";
 let editing = { module: null, id: null };
 let pendingLogin = null;
+let cnpjLookupTimer = null;
+let lastCnpjLookupKey = "";
 
 const dialog = document.querySelector("#record-dialog");
 const form = document.querySelector("#record-form");
@@ -192,10 +194,17 @@ document.querySelectorAll(".dialog-cancel").forEach((button) => {
 });
 
 dynamicFields.addEventListener("input", (event) => {
-  if (editing.module === "empresas" && event.target.name === "documento") {
+  if (isCnpjField(editing.module, event.target.name)) {
     event.target.value = formatCnpj(event.target.value);
+    scheduleCnpjLookup(event.target);
   }
 });
+
+dynamicFields.addEventListener("blur", (event) => {
+  if (isCnpjField(editing.module, event.target.name)) {
+    lookupCnpjCompany(event.target);
+  }
+}, true);
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -291,6 +300,7 @@ function openForm(module, id = null) {
   const record = id ? getModuleCollection(module).find((item) => item.id === id) : {};
 
   dialogError.textContent = "";
+  lastCnpjLookupKey = "";
   document.querySelector("#dialog-module").textContent = moduleNames[module];
   document.querySelector("#dialog-title").textContent = id ? "Editar registro" : "Novo registro";
   dynamicFields.innerHTML = fields[module].map((field) => fieldTemplate(field, record[field.name])).join("");
@@ -329,7 +339,7 @@ function fieldTemplate(field, value = "") {
     return `<label class="field"><span>${field.label}</span><select name="${field.name}" ${required}>${placeholder}${options}</select></label>`;
   }
 
-  const inputValue = editing.module === "empresas" && field.name === "documento" ? formatCnpj(value || "") : value || "";
+  const inputValue = field.cnpj ? formatCnpj(value || "") : value || "";
   return `<label class="field"><span>${field.label}</span><input name="${field.name}" type="${field.type}" step="${field.step || ""}" value="${escapeAttr(inputValue)}" ${required}></label>`;
 }
 
@@ -348,9 +358,7 @@ function normalizeRecord(record, module) {
   if (module === "usuarios" && (!record.empresas || !record.empresas.length)) {
     record.empresas = [];
   }
-  if (module === "empresas") {
-    record.documento = formatCnpj(record.documento);
-  }
+  normalizeCnpjFields(record, module);
   if (module === "produtos") {
     record.preco = Number(record.preco || 0);
     record.estoque = Number(record.estoque || 0);
@@ -364,10 +372,23 @@ function normalizeRecord(record, module) {
 }
 
 function validateRecord(record, module) {
-  if (module === "empresas" && !isValidCnpj(record.documento)) {
-    return { valid: false, message: "Informe um CNPJ valido." };
+  const invalidCnpjField = fields[module].find((field) => field.cnpj && !isValidCnpj(record[field.name]));
+  if (invalidCnpjField) {
+    return { valid: false, message: `Informe um ${invalidCnpjField.label} valido.` };
   }
   return { valid: true };
+}
+
+function normalizeCnpjFields(record, module) {
+  fields[module].forEach((field) => {
+    if (field.cnpj) {
+      record[field.name] = formatCnpj(record[field.name]);
+    }
+  });
+}
+
+function isCnpjField(module, fieldName) {
+  return Boolean(fields[module]?.find((field) => field.name === fieldName && field.cnpj));
 }
 
 function render() {
@@ -427,7 +448,7 @@ function renderClientes() {
   const rows = state.clientes.filter((item) => matches(item, query)).map((client) => `
     <tr>
       <td>${escapeHtml(client.nome)}</td>
-      <td>${escapeHtml(client.documento)}</td>
+      <td>${escapeHtml(client.documento ? formatCnpj(client.documento) : "-")}</td>
       <td>${escapeHtml(client.telefone || "-")}</td>
       <td>${escapeHtml(client.cidade || "-")}</td>
       <td>${badge(client.status)}</td>
@@ -442,7 +463,7 @@ function renderFornecedores() {
   const rows = state.fornecedores.filter((item) => matches(item, query)).map((supplier) => `
     <tr>
       <td>${escapeHtml(supplier.nome)}</td>
-      <td>${escapeHtml(supplier.documento)}</td>
+      <td>${escapeHtml(supplier.documento ? formatCnpj(supplier.documento) : "-")}</td>
       <td>${escapeHtml(supplier.telefone || "-")}</td>
       <td>${escapeHtml(supplier.cidade || "-")}</td>
       <td>${badge(supplier.status)}</td>
@@ -630,9 +651,19 @@ function loadState() {
 }
 
 function migrateState(savedState) {
+  if (Array.isArray(savedState.clientes)) {
+    savedState.clientes = savedState.clientes.map((client) => ({
+      ...client,
+      documento: normalizeCompanyDocument(client.documento)
+    }));
+  }
   if (!Array.isArray(savedState.fornecedores)) {
     savedState.fornecedores = [];
   }
+  savedState.fornecedores = savedState.fornecedores.map((supplier) => ({
+    ...supplier,
+    documento: normalizeCompanyDocument(supplier.documento)
+  }));
   const legacyFinancial = Array.isArray(savedState.financeiro) ? savedState.financeiro : [];
   if (legacyFinancial.length && !savedState.contasReceber.length && !savedState.contasPagar.length) {
     savedState.contasReceber = legacyFinancial
@@ -840,6 +871,43 @@ function isValidCnpj(value) {
   const firstDigit = calculateDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   const secondDigit = calculateDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   return firstDigit === Number(cnpj[12]) && secondDigit === Number(cnpj[13]);
+}
+
+function scheduleCnpjLookup(input) {
+  clearTimeout(cnpjLookupTimer);
+  cnpjLookupTimer = setTimeout(() => lookupCnpjCompany(input), 650);
+}
+
+async function lookupCnpjCompany(input) {
+  const cnpj = onlyDigits(input.value);
+  if (!isValidCnpj(cnpj)) return;
+
+  const lookupKey = `${editing.module}:${cnpj}`;
+  if (lookupKey === lastCnpjLookupKey) return;
+  lastCnpjLookupKey = lookupKey;
+
+  const nameInput = form.querySelector('[name="nome"]');
+  if (!nameInput) return;
+
+  try {
+    dialogError.textContent = "Consultando CNPJ...";
+    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    if (!response.ok) {
+      dialogError.textContent = "CNPJ valido, mas nao encontrado na consulta publica.";
+      return;
+    }
+
+    const company = await response.json();
+    const companyName = company.razao_social || company.nome_fantasia;
+    if (companyName) {
+      nameInput.value = companyName;
+      dialogError.textContent = "";
+    } else {
+      dialogError.textContent = "CNPJ encontrado, mas sem razao social retornada.";
+    }
+  } catch {
+    dialogError.textContent = "Nao foi possivel consultar a razao social agora.";
+  }
 }
 
 function normalizeLookup(value) {
