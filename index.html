@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MiniERP</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section class="login-screen" id="login-screen">
+      <form class="login-card" id="login-form">
+        <div class="login-brand">
+          <img class="app-logo login-logo" src="assets/logo-admerp.png" alt="admerp solucoes empresariais" />
+          <p class="eyebrow">Acesso local</p>
+        </div>
+
+        <label class="field">
+          <span>Usuario</span>
+          <input id="login-user" name="usuario" type="text" autocomplete="username" required />
+        </label>
+
+        <label class="field">
+          <span>Senha</span>
+          <input id="login-password" name="senha" type="password" autocomplete="current-password" required />
+        </label>
+
+        <label class="check-field">
+          <input id="remember-login" type="checkbox" />
+          <span>Lembrar credenciais</span>
+        </label>
+
+        <p class="login-error" id="login-error" aria-live="polite"></p>
+        <button class="primary-button" type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <section class="login-screen is-hidden" id="tenant-screen">
+      <form class="login-card" id="tenant-form">
+        <div class="login-brand">
+          <img class="app-logo login-logo" src="assets/logo-admerp.png" alt="admerp solucoes empresariais" />
+          <p class="eyebrow">Selecionar empresa</p>
+        </div>
+
+        <label class="field">
+          <span>Empresa</span>
+          <select id="tenant-select" required></select>
+        </label>
+
+        <p class="login-error" id="tenant-error" aria-live="polite"></p>
+        <div class="login-actions">
+          <button class="ghost-button" id="tenant-back" type="button">Voltar</button>
+          <button class="primary-button" type="submit">Acessar</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="app-shell menu-open is-hidden" id="app-shell">
+      <button class="hamburger-button" id="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <img class="app-logo sidebar-logo" src="assets/logo-admerp.png" alt="admerp" />
+        </div>
+
+        <nav class="nav-list" aria-label="Modulos">
+          <button class="nav-item active" data-view="dashboard" type="button">
+            <span class="nav-icon">D</span>
+            Dashboard
+          </button>
+          <button class="nav-item" data-view="clientes" type="button">
+            <span class="nav-icon">C</span>
+            Clientes
+          </button>
+          <button class="nav-item" data-view="fornecedores" type="button">
+            <span class="nav-icon">F</span>
+            Fornecedores
+          </button>
+          <button class="nav-item" data-view="produtos" type="button">
+            <span class="nav-icon">P</span>
+            Produtos
+          </button>
+          <button class="nav-item" data-view="vendas" type="button">
+            <span class="nav-icon">V</span>
+            Vendas
+          </button>
+          <button class="nav-item" data-view="contasReceber" type="button">
+            <span class="nav-icon">$</span>
+            A Receber
+          </button>
+          <button class="nav-item" data-view="contasPagar" type="button">
+            <span class="nav-icon">-</span>
+            A Pagar
+          </button>
+          <button class="nav-item" data-view="acessos" type="button">
+            <span class="nav-icon">U</span>
+            Acessos
+          </button>
+        </nav>
+
+        <strong class="sidebar-tenant" id="active-tenant-name">Minha Empresa LTDA</strong>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Sistema local</p>
+            <h1 id="page-title">Dashboard</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button" id="seed-data" type="button">Popular dados</button>
+            <button class="primary-button" id="open-create" type="button">Novo registro</button>
+            <button class="ghost-button" id="logout-button" type="button">Sair</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard-view" aria-labelledby="page-title">
+          <div class="metrics-grid">
+            <article class="metric-panel">
+              <span>Receita do mes</span>
+              <strong id="metric-revenue">R$ 0,00</strong>
+              <small id="metric-revenue-detail">0 vendas registradas</small>
+            </article>
+            <article class="metric-panel">
+              <span>Clientes</span>
+              <strong id="metric-customers">0</strong>
+              <small>cadastros ativos</small>
+            </article>
+            <article class="metric-panel">
+              <span>Produtos</span>
+              <strong id="metric-products">0</strong>
+              <small id="metric-stock-alert">sem alertas de estoque</small>
+            </article>
+            <article class="metric-panel">
+              <span>Saldo financeiro</span>
+              <strong id="metric-balance">R$ 0,00</strong>
+              <small>receber menos pagar</small>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Operacao</p>
+                  <h2>Vendas recentes</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Produto</th>
+                      <th>Status</th>
+                      <th class="align-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-sales"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Atencao</p>
+                  <h2>Estoque baixo</h2>
+                </div>
+              </div>
+              <div id="stock-list" class="stack-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="clientes-view">
+          <div class="module-toolbar">
+            <input id="clientes-search" type="search" placeholder="Buscar cliente" />
+            <button class="primary-button module-create" data-module="clientes" type="button">Adicionar cliente</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Documento</th>
+                    <th>Telefone</th>
+                    <th>Cidade</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="clientes-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="produtos-view">
+          <div class="module-toolbar">
+            <input id="produtos-search" type="search" placeholder="Buscar produto" />
+            <button class="primary-button module-create" data-module="produtos" type="button">Adicionar produto</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Categoria</th>
+                    <th class="align-right">Preco</th>
+                    <th class="align-right">Estoque</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="produtos-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="fornecedores-view">
+          <div class="module-toolbar">
+            <input id="fornecedores-search" type="search" placeholder="Buscar fornecedor" />
+            <button class="primary-button module-create" data-module="fornecedores" type="button">Adicionar fornecedor</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Documento</th>
+                    <th>Telefone</th>
+                    <th>Cidade</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="fornecedores-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="vendas-view">
+          <div class="module-toolbar">
+            <input id="vendas-search" type="search" placeholder="Buscar venda" />
+            <button class="primary-button module-create" data-module="vendas" type="button">Registrar venda</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Cliente</th>
+                    <th>Produto</th>
+                    <th>Status</th>
+                    <th class="align-right">Total</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="vendas-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="contasReceber-view">
+          <div class="module-toolbar">
+            <input id="contasReceber-search" type="search" placeholder="Buscar conta a receber" />
+            <button class="primary-button module-create" data-module="contasReceber" type="button">Nova conta a receber</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Vencimento</th>
+                    <th>Descricao</th>
+                    <th>Cliente</th>
+                    <th>Status</th>
+                    <th class="align-right">Valor</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="contasReceber-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="contasPagar-view">
+          <div class="module-toolbar">
+            <input id="contasPagar-search" type="search" placeholder="Buscar conta a pagar" />
+            <button class="primary-button module-create" data-module="contasPagar" type="button">Nova conta a pagar</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Vencimento</th>
+                    <th>Descricao</th>
+                    <th>Fornecedor</th>
+                    <th>Status</th>
+                    <th class="align-right">Valor</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="contasPagar-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="acessos-view">
+          <div class="access-grid">
+            <section class="panel table-panel">
+              <div class="panel-header access-header">
+                <div>
+                  <p class="eyebrow">Administracao</p>
+                  <h2>Empresas</h2>
+                </div>
+                <button class="primary-button module-create" data-module="empresas" type="button">Adicionar empresa</button>
+              </div>
+              <div class="module-toolbar access-toolbar">
+                <input id="empresas-search" type="search" placeholder="Buscar empresa" />
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Empresa</th>
+                      <th>Documento</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="empresas-table"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel table-panel">
+              <div class="panel-header access-header">
+                <div>
+                  <p class="eyebrow">Seguranca local</p>
+                  <h2>Usuarios autorizados</h2>
+                </div>
+                <button class="primary-button module-create" data-module="usuarios" type="button">Adicionar usuario</button>
+              </div>
+              <div class="module-toolbar access-toolbar">
+                <input id="usuarios-search" type="search" placeholder="Buscar usuario" />
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Empresa</th>
+                      <th>Perfil</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="usuarios-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="record-dialog">
+      <form method="dialog" class="dialog-card" id="record-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow" id="dialog-module">Cadastro</p>
+            <h2 id="dialog-title">Novo registro</h2>
+          </div>
+          <button class="icon-button dialog-cancel" aria-label="Fechar" type="button">x</button>
+        </div>
+        <div class="form-grid" id="dynamic-fields"></div>
+        <menu class="dialog-actions">
+          <button class="ghost-button dialog-cancel" type="button">Cancelar</button>
+          <button class="primary-button" id="save-record" value="default" type="submit">Salvar</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
