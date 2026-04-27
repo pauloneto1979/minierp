@@ -138,6 +138,7 @@ let pendingLogin = null;
 const dialog = document.querySelector("#record-dialog");
 const form = document.querySelector("#record-form");
 const dynamicFields = document.querySelector("#dynamic-fields");
+const dialogError = document.querySelector("#dialog-error");
 const loginScreen = document.querySelector("#login-screen");
 const tenantScreen = document.querySelector("#tenant-screen");
 const appShell = document.querySelector("#app-shell");
@@ -188,6 +189,12 @@ document.querySelectorAll('input[type="search"]').forEach((input) => {
 
 document.querySelectorAll(".dialog-cancel").forEach((button) => {
   button.addEventListener("click", () => dialog.close());
+});
+
+dynamicFields.addEventListener("input", (event) => {
+  if (editing.module === "empresas" && event.target.name === "documento") {
+    event.target.value = formatCnpj(event.target.value);
+  }
 });
 
 loginForm.addEventListener("submit", (event) => {
@@ -248,6 +255,11 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   const record = collectFormRecord();
   normalizeRecord(record, editing.module);
+  const validation = validateRecord(record, editing.module);
+  if (!validation.valid) {
+    dialogError.textContent = validation.message;
+    return;
+  }
 
   const collection = getModuleCollection(editing.module);
   if (editing.id) {
@@ -278,6 +290,7 @@ function openForm(module, id = null) {
   editing = { module, id };
   const record = id ? getModuleCollection(module).find((item) => item.id === id) : {};
 
+  dialogError.textContent = "";
   document.querySelector("#dialog-module").textContent = moduleNames[module];
   document.querySelector("#dialog-title").textContent = id ? "Editar registro" : "Novo registro";
   dynamicFields.innerHTML = fields[module].map((field) => fieldTemplate(field, record[field.name])).join("");
@@ -316,7 +329,8 @@ function fieldTemplate(field, value = "") {
     return `<label class="field"><span>${field.label}</span><select name="${field.name}" ${required}>${placeholder}${options}</select></label>`;
   }
 
-  return `<label class="field"><span>${field.label}</span><input name="${field.name}" type="${field.type}" step="${field.step || ""}" value="${escapeAttr(value || "")}" ${required}></label>`;
+  const inputValue = editing.module === "empresas" && field.name === "documento" ? formatCnpj(value || "") : value || "";
+  return `<label class="field"><span>${field.label}</span><input name="${field.name}" type="${field.type}" step="${field.step || ""}" value="${escapeAttr(inputValue)}" ${required}></label>`;
 }
 
 function collectFormRecord() {
@@ -335,7 +349,7 @@ function normalizeRecord(record, module) {
     record.empresas = [];
   }
   if (module === "empresas") {
-    record.documento = normalizeDocument(record.documento);
+    record.documento = formatCnpj(record.documento);
   }
   if (module === "produtos") {
     record.preco = Number(record.preco || 0);
@@ -347,6 +361,13 @@ function normalizeRecord(record, module) {
   if (module === "contasReceber" || module === "contasPagar") {
     record.valor = Number(record.valor || 0);
   }
+}
+
+function validateRecord(record, module) {
+  if (module === "empresas" && !isValidCnpj(record.documento)) {
+    return { valid: false, message: "Informe um CNPJ valido." };
+  }
+  return { valid: true };
 }
 
 function render() {
@@ -754,6 +775,34 @@ function legacyCompanyDocument(companyName) {
 
 function normalizeDocument(document) {
   return String(document || "").trim();
+}
+
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function formatCnpj(value) {
+  const digits = onlyDigits(value).slice(0, 14);
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+function isValidCnpj(value) {
+  const cnpj = onlyDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
+
+  const calculateDigit = (base, weights) => {
+    const total = weights.reduce((sum, weight, index) => sum + Number(base[index]) * weight, 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const firstDigit = calculateDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const secondDigit = calculateDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return firstDigit === Number(cnpj[12]) && secondDigit === Number(cnpj[13]);
 }
 
 function normalizeLookup(value) {
