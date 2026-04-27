@@ -129,11 +129,13 @@ const moduleNames = {
 
 let activeTenant = DEFAULT_TENANT;
 let activeTenantKey = tenantKey(DEFAULT_TENANT);
+let activeTenantDocument = DEFAULT_TENANT_DOCUMENT;
 let state = structuredClone(initialState);
 let accessRegistry = loadAccessRegistry();
 let currentView = "dashboard";
 let editing = { module: null, id: null };
 let pendingLogin = null;
+let sessionCompanies = [];
 let cnpjLookupTimer = null;
 let lastCnpjLookupKey = "";
 
@@ -153,6 +155,7 @@ const tenantForm = document.querySelector("#tenant-form");
 const tenantSelect = document.querySelector("#tenant-select");
 const tenantError = document.querySelector("#tenant-error");
 const activeTenantName = document.querySelector("#active-tenant-name");
+const tenantSwitcher = document.querySelector("#tenant-switcher");
 const menuToggle = document.querySelector("#menu-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 
@@ -241,6 +244,12 @@ tenantForm.addEventListener("submit", (event) => {
   completeLogin(tenantSelect.value);
 });
 
+tenantSwitcher.addEventListener("change", () => {
+  if (tenantSwitcher.value) {
+    setTenant(tenantSwitcher.value);
+  }
+});
+
 document.querySelector("#tenant-back").addEventListener("click", () => {
   pendingLogin = null;
   tenantScreen.classList.add("is-hidden");
@@ -249,6 +258,7 @@ document.querySelector("#tenant-back").addEventListener("click", () => {
 });
 
 document.querySelector("#logout-button").addEventListener("click", () => {
+  sessionCompanies = [];
   appShell.classList.add("is-hidden");
   loginScreen.classList.remove("is-hidden");
   tenantScreen.classList.add("is-hidden");
@@ -393,6 +403,7 @@ function isCnpjField(module, fieldName) {
 
 function render() {
   activeTenantName.textContent = activeTenant;
+  renderTenantSwitcher();
   renderDashboard();
   renderClientes();
   renderFornecedores();
@@ -947,6 +958,7 @@ function loadRememberedLogin() {
 
 function setTenant(tenantName) {
   const company = companyByDocument(tenantName);
+  activeTenantDocument = company?.documento || tenantName;
   activeTenant = company?.nome || tenantName;
   activeTenantKey = tenantKey(company?.documento || tenantName);
   state = loadState();
@@ -995,6 +1007,7 @@ function showTenantSelection(companies) {
 }
 
 function completeLogin(tenant) {
+  sessionCompanies = pendingLogin?.companies || [tenant];
   setTenant(tenant);
   if (rememberLogin.checked && pendingLogin) {
     localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({
@@ -1006,6 +1019,15 @@ function completeLogin(tenant) {
   }
   pendingLogin = null;
   showApp();
+}
+
+function renderTenantSwitcher() {
+  const tenantContainer = tenantSwitcher.closest(".sidebar-tenant");
+  const availableCompanies = sessionCompanies.filter((companyDocument) => companyByDocument(companyDocument)?.status === "Ativa");
+  tenantContainer.classList.toggle("has-switcher", availableCompanies.length > 1);
+  tenantSwitcher.innerHTML = availableCompanies
+    .map((companyDocument) => `<option value="${escapeAttr(companyDocument)}" ${sameText(companyDocument, activeTenantDocument) ? "selected" : ""}>${escapeHtml(companyNameByDocument(companyDocument))}</option>`)
+    .join("");
 }
 
 function escapeHtml(value) {

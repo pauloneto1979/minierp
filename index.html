@@ -102,7 +102,11 @@
           </button>
         </nav>
 
-        <strong class="sidebar-tenant" id="active-tenant-name">Minha Empresa LTDA</strong>
+        <div class="sidebar-tenant">
+          <span class="sidebar-tenant-label">Empresa</span>
+          <select id="tenant-switcher" class="tenant-switcher" aria-label="Trocar empresa"></select>
+          <strong id="active-tenant-name">Minha Empresa LTDA</strong>
+        </div>
       </aside>
 
       <main class="workspace">

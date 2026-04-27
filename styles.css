@@ -229,6 +229,36 @@ button {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   color: #eef4ef;
   font-size: 0.92rem;
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-tenant-label {
+  color: #b6c5bb;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tenant-switcher {
+  display: none;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.tenant-switcher option {
+  color: var(--ink);
+}
+
+.sidebar-tenant.has-switcher .tenant-switcher {
+  display: block;
+}
+
+.sidebar-tenant.has-switcher strong {
+  display: none;
 }
 
 .workspace {
