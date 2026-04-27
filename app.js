@@ -2,7 +2,7 @@ const STORAGE_KEY = "minierp-state-v1";
 const REMEMBERED_LOGIN_KEY = "minierp-remembered-login";
 const ACCESS_REGISTRY_KEY = "minierp-access-registry-v1";
 const DEFAULT_TENANT = "Minha Empresa LTDA";
-const DEFAULT_TENANT_DOCUMENT = "00.000.000/0001-00";
+const DEFAULT_TENANT_DOCUMENT = "11.444.777/0001-61";
 
 const makeId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -731,6 +731,10 @@ function authorizeLogin(username, password) {
     accessRegistry.empresas.some((company) => sameText(company.documento, companyDocument) && company.status === "Ativa")
   );
   if (!companies.length) {
+    const recoveredCompanies = recoverUserCompanies(user);
+    if (recoveredCompanies.length) {
+      return { allowed: true, companies: recoveredCompanies };
+    }
     return { allowed: false, message: "Usuario sem empresa ativa autorizada." };
   }
 
@@ -751,6 +755,29 @@ function bootstrapAccessRegistry(username, tenant, password) {
 
 function userCompanies(user) {
   return Array.isArray(user.empresas) ? user.empresas : user.empresa ? [user.empresa] : [];
+}
+
+function recoverUserCompanies(user) {
+  const activeCompanies = accessRegistry.empresas.filter((company) => company.status === "Ativa");
+  const company = activeCompanies[0] || ensureDefaultCompany();
+  if (!company?.documento) return [];
+
+  user.empresas = [company.documento];
+  delete user.empresa;
+  saveAccessRegistry();
+  return [company.documento];
+}
+
+function ensureDefaultCompany() {
+  let company = accessRegistry.empresas.find((item) => sameText(item.documento, DEFAULT_TENANT_DOCUMENT));
+  if (company) {
+    company.status = "Ativa";
+    return company;
+  }
+
+  company = { id: makeId(), nome: DEFAULT_TENANT, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" };
+  accessRegistry.empresas.push(company);
+  return company;
 }
 
 function companyByDocument(document) {
