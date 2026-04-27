@@ -3,6 +3,7 @@ const REMEMBERED_LOGIN_KEY = "minierp-remembered-login";
 const ACCESS_REGISTRY_KEY = "minierp-access-registry-v1";
 const DEFAULT_TENANT = "Minha Empresa LTDA";
 const DEFAULT_TENANT_DOCUMENT = "11.444.777/0001-61";
+const SUPABASE_CONFIG = window.MINIERP_CONFIG?.supabase || {};
 
 const makeId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -209,7 +210,7 @@ dynamicFields.addEventListener("blur", (event) => {
   }
 }, true);
 
-loginForm.addEventListener("submit", (event) => {
+loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const username = loginUser.value.trim();
   const password = loginPassword.value;
@@ -219,7 +220,8 @@ loginForm.addEventListener("submit", (event) => {
     return;
   }
 
-  const accessCheck = authorizeLogin(username, password);
+  loginError.textContent = "Validando acesso...";
+  const accessCheck = await authorizeLogin(username, password);
   if (!accessCheck.allowed) {
     loginError.textContent = accessCheck.message;
     return;
@@ -754,7 +756,18 @@ function saveAccessRegistry() {
   localStorage.setItem(ACCESS_REGISTRY_KEY, JSON.stringify(accessRegistry));
 }
 
-function authorizeLogin(username, password) {
+async function authorizeLogin(username, password) {
+  if (isSupabaseConfigured()) {
+    const onlineAccess = await authorizeLoginOnline(username, password);
+    if (onlineAccess.available) {
+      return onlineAccess;
+    }
+  }
+
+  return authorizeLoginLocal(username, password);
+}
+
+function authorizeLoginLocal(username, password) {
   if (!accessRegistry.empresas.length && !accessRegistry.usuarios.length) {
     bootstrapAccessRegistry(username, DEFAULT_TENANT, password);
     return { allowed: true, companies: [DEFAULT_TENANT_DOCUMENT] };
@@ -781,6 +794,85 @@ function authorizeLogin(username, password) {
   }
 
   return { allowed: true, companies };
+}
+
+async function authorizeLoginOnline(username, password) {
+  try {
+    const user = await supabaseGetSingle("usuarios", {
+      usuario: `eq.${username}`,
+      senha: `eq.${password}`,
+      status: "eq.Ativo",
+      select: "id,usuario,perfil,status"
+    });
+
+    if (!user) {
+      return { available: true, allowed: false, message: "Usuario ou senha nao autorizados." };
+    }
+
+    const links = await supabaseGetMany("usuario_empresas", {
+      usuario_id: `eq.${user.id}`,
+      select: "empresas(id,nome,documento,status)"
+    });
+
+    const companies = links
+      .map((link) => link.empresas)
+      .filter((company) => company?.status === "Ativa" && company.documento);
+
+    if (!companies.length) {
+      return { available: true, allowed: false, message: "Usuario sem empresa ativa autorizada." };
+    }
+
+    mergeOnlineCompanies(companies);
+    return { available: true, allowed: true, companies: companies.map((company) => company.documento) };
+  } catch {
+    return { available: false, allowed: false, message: "Nao foi possivel validar online." };
+  }
+}
+
+function isSupabaseConfigured() {
+  return Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+}
+
+async function supabaseGetSingle(table, params) {
+  const rows = await supabaseGetMany(table, { ...params, limit: "1" });
+  return rows[0] || null;
+}
+
+async function supabaseGetMany(table, params) {
+  const url = new URL(`${SUPABASE_CONFIG.url.replace(/\/$/, "")}/rest/v1/${table}`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_CONFIG.anonKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supabase request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function mergeOnlineCompanies(companies) {
+  companies.forEach((company) => {
+    const existing = accessRegistry.empresas.find((item) => sameText(item.documento, company.documento));
+    if (existing) {
+      existing.nome = company.nome;
+      existing.status = company.status;
+      return;
+    }
+
+    accessRegistry.empresas.push({
+      id: company.id || makeId(),
+      nome: company.nome,
+      documento: company.documento,
+      status: company.status || "Ativa"
+    });
+  });
+  saveAccessRegistry();
 }
 
 function bootstrapAccessRegistry(username, tenant, password) {

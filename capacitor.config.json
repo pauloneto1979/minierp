@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.admerp.minierp",
+  "appName": "admerp",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -14,6 +14,14 @@ Aplicacao web local para uma primeira versao de MiniERP.
 - Menu hamburguer para abrir e recolher a navegacao.
 - Cadastro de empresas e usuarios autorizados para acesso local.
 - Logo da admerp aplicado no login e na navegacao.
+- Login online opcional via Supabase quando `app-config.js` estiver configurado.
+
+## Supabase
+
+1. Crie um projeto no Supabase.
+2. Execute o arquivo `supabase-schema.sql` no SQL Editor.
+3. Copie a Project URL e a anon public key.
+4. Preencha `app-config.js`.
 
 ## Como abrir
 
