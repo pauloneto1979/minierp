@@ -522,7 +522,7 @@ function renderEmpresas() {
   const rows = accessRegistry.empresas.filter((item) => matches(item, query)).map((company) => `
     <tr>
       <td>${escapeHtml(company.nome)}</td>
-      <td>${escapeHtml(company.documento || "-")}</td>
+      <td>${escapeHtml(company.documento ? formatCnpj(company.documento) : "-")}</td>
       <td>${badge(company.status)}</td>
       <td class="align-right">${rowActions("empresas", company.id)}</td>
     </tr>
@@ -695,14 +695,14 @@ function migrateAccessRegistry(registry) {
   registry.usuarios = Array.isArray(registry.usuarios) ? registry.usuarios : [];
   const legacyCompanyDocuments = new Map();
   registry.empresas = registry.empresas.map((company) => {
-    const document = normalizeDocument(company.documento) || legacyCompanyDocument(company.nome);
+    const document = normalizeCompanyDocument(company.documento) || legacyCompanyDocument(company.nome);
     legacyCompanyDocuments.set(normalizeLookup(company.nome), document);
     return { ...company, documento: document };
   });
   registry.usuarios = registry.usuarios.map((user) => ({
     ...user,
     empresas: (Array.isArray(user.empresas) ? user.empresas : user.empresa ? [user.empresa] : [])
-      .map((companyRef) => companyDocumentFromReference(companyRef, legacyCompanyDocuments))
+      .map((companyRef) => companyDocumentFromReference(companyRef, registry.empresas, legacyCompanyDocuments))
       .filter(Boolean)
   }));
   return registry;
@@ -761,9 +761,13 @@ function companyNameByDocument(document) {
   return companyByDocument(document)?.nome || document;
 }
 
-function companyDocumentFromReference(reference, legacyCompanyDocuments) {
+function companyDocumentFromReference(reference, companies, legacyCompanyDocuments) {
   const normalizedReference = normalizeDocument(reference);
-  if (accessRegistry.empresas.some((company) => sameText(company.documento, normalizedReference))) {
+  const formattedReference = normalizeCompanyDocument(reference);
+  if (companies.some((company) => sameText(company.documento, formattedReference))) {
+    return formattedReference;
+  }
+  if (companies.some((company) => sameText(company.documento, normalizedReference))) {
     return normalizedReference;
   }
   return legacyCompanyDocuments.get(normalizeLookup(reference)) || normalizedReference;
@@ -775,6 +779,12 @@ function legacyCompanyDocument(companyName) {
 
 function normalizeDocument(document) {
   return String(document || "").trim();
+}
+
+function normalizeCompanyDocument(document) {
+  const digits = onlyDigits(document);
+  if (digits.length === 14) return formatCnpj(digits);
+  return normalizeDocument(document);
 }
 
 function onlyDigits(value) {
