@@ -789,19 +789,70 @@ async function migrateLocalDataToSupabase() {
   if (!isSupabaseConfigured()) return false;
   const localState = loadLocalStateForActiveTenant();
   const hasLocalRecords = onlineDataModules.some((module) => localState[module]?.length);
-  if (!hasLocalRecords) return false;
+  const hasAccessRecords = accessRegistry.empresas.length || accessRegistry.usuarios.length;
+  if (!hasLocalRecords && !hasAccessRecords) return false;
 
   const previousState = state;
   try {
+    if (hasAccessRecords) {
+      await migrateAccessRegistryToSupabase();
+    }
     state = normalizeLocalStateForSupabase(localState);
-    await Promise.all(onlineDataModules.map((module) => saveOnlineModule(module)));
-    state = await loadOnlineState();
+    if (hasLocalRecords) {
+      await Promise.all(onlineDataModules.map((module) => saveOnlineModule(module)));
+      state = await loadOnlineState();
+    }
     render();
   } catch (error) {
     state = previousState;
     throw error;
   }
   return true;
+}
+
+async function migrateAccessRegistryToSupabase() {
+  const companiesPayload = accessRegistry.empresas
+    .map((company) => ({
+      nome: company.nome,
+      documento: normalizeCompanyDocument(company.documento),
+      status: company.status || "Ativa"
+    }))
+    .filter((company) => company.nome && company.documento);
+
+  const usersPayload = accessRegistry.usuarios
+    .map((user) => ({
+      usuario: user.usuario,
+      senha: user.senha || "1234",
+      perfil: user.perfil || "Administrador",
+      status: user.status || "Ativo"
+    }))
+    .filter((user) => user.usuario && user.senha);
+
+  const onlineCompanies = companiesPayload.length
+    ? await supabaseUpsert("empresas", companiesPayload, { onConflict: "documento", returnRows: true })
+    : [];
+  const onlineUsers = usersPayload.length
+    ? await supabaseUpsert("usuarios", usersPayload, { onConflict: "usuario", returnRows: true })
+    : [];
+
+  const companyIds = new Map(onlineCompanies.map((company) => [normalizeCompanyDocument(company.documento), company.id]));
+  const userIds = new Map(onlineUsers.map((user) => [normalizeLookup(user.usuario), user.id]));
+  const links = [];
+
+  accessRegistry.usuarios.forEach((user) => {
+    const userId = userIds.get(normalizeLookup(user.usuario));
+    if (!userId) return;
+    userCompanies(user).forEach((companyDocument) => {
+      const companyId = companyIds.get(normalizeCompanyDocument(companyDocument));
+      if (companyId) {
+        links.push({ usuario_id: userId, empresa_id: companyId });
+      }
+    });
+  });
+
+  if (links.length) {
+    await supabaseUpsert("usuario_empresas", links, { onConflict: "usuario_id,empresa_id" });
+  }
 }
 
 function loadLocalStateForActiveTenant() {
@@ -994,15 +1045,26 @@ async function supabaseGetMany(table, params) {
   return response.json();
 }
 
-async function supabaseUpsert(table, rows) {
+async function supabaseUpsert(table, rows, options = {}) {
+  if (!rows.length) return options.returnRows ? [] : undefined;
   const baseUrl = SUPABASE_CONFIG.url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
-  const response = await fetch(`${baseUrl}/rest/v1/${table}`, {
+  const url = new URL(`${baseUrl}/rest/v1/${table}`);
+  if (options.onConflict) {
+    url.searchParams.set("on_conflict", options.onConflict);
+  }
+
+  const prefer = [
+    "resolution=merge-duplicates",
+    options.returnRows ? "return=representation" : ""
+  ].filter(Boolean).join(",");
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       apikey: SUPABASE_CONFIG.anonKey,
       Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`,
       "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates"
+      Prefer: prefer
     },
     body: JSON.stringify(rows)
   });
@@ -1010,6 +1072,8 @@ async function supabaseUpsert(table, rows) {
   if (!response.ok) {
     throw new Error(`Supabase upsert failed: ${response.status}`);
   }
+
+  return options.returnRows ? response.json() : undefined;
 }
 
 async function supabaseDelete(table, params) {
