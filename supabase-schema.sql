@@ -93,6 +93,18 @@ create table if not exists contas_receber (
   created_at timestamptz not null default now()
 );
 
+alter table contas_receber add column if not exists emissao date;
+alter table contas_receber add column if not exists documento text;
+alter table contas_receber add column if not exists parcela text;
+alter table contas_receber add column if not exists categoria text;
+alter table contas_receber add column if not exists "contaBancaria" text;
+alter table contas_receber add column if not exists forma text;
+alter table contas_receber add column if not exists juros numeric not null default 0;
+alter table contas_receber add column if not exists multa numeric not null default 0;
+alter table contas_receber add column if not exists desconto numeric not null default 0;
+alter table contas_receber add column if not exists "valorRecebido" numeric not null default 0;
+alter table contas_receber add column if not exists "dataBaixa" date;
+
 create table if not exists contas_pagar (
   id uuid primary key default gen_random_uuid(),
   empresa_documento text not null,
@@ -101,5 +113,57 @@ create table if not exists contas_pagar (
   fornecedor text not null,
   status text not null default 'Aberto',
   valor numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table contas_pagar add column if not exists emissao date;
+alter table contas_pagar add column if not exists documento text;
+alter table contas_pagar add column if not exists parcela text;
+alter table contas_pagar add column if not exists categoria text;
+alter table contas_pagar add column if not exists "contaBancaria" text;
+alter table contas_pagar add column if not exists forma text;
+alter table contas_pagar add column if not exists juros numeric not null default 0;
+alter table contas_pagar add column if not exists multa numeric not null default 0;
+alter table contas_pagar add column if not exists desconto numeric not null default 0;
+alter table contas_pagar add column if not exists "valorPago" numeric not null default 0;
+alter table contas_pagar add column if not exists "dataBaixa" date;
+
+create table if not exists plano_contas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  nome text not null,
+  tipo text not null default 'Despesa',
+  "centroCusto" text,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists contas_bancarias (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  nome text not null,
+  banco text,
+  agencia text,
+  conta text,
+  tipo text,
+  "saldoInicial" numeric not null default 0,
+  status text not null default 'Ativa',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists movimentacoes_financeiras (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  origem text,
+  "origemId" text,
+  data date not null,
+  tipo text not null,
+  descricao text not null,
+  "contaBancaria" text,
+  categoria text,
+  "centroCusto" text,
+  forma text,
+  valor numeric not null default 0,
+  status text not null default 'Realizado',
   created_at timestamptz not null default now()
 );

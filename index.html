@@ -98,6 +98,22 @@
             <span class="nav-icon">-</span>
             A Pagar
           </button>
+          <button class="nav-item" data-view="planoContas" type="button">
+            <span class="nav-icon">#</span>
+            Plano
+          </button>
+          <button class="nav-item" data-view="contasBancarias" type="button">
+            <span class="nav-icon">B</span>
+            Bancos
+          </button>
+          <button class="nav-item" data-view="movimentacoes" type="button">
+            <span class="nav-icon">M</span>
+            Movimentos
+          </button>
+          <button class="nav-item" data-view="fluxoCaixa" type="button">
+            <span class="nav-icon">F</span>
+            Fluxo
+          </button>
           <button class="nav-item" data-view="acessos" type="button">
             <span class="nav-icon">U</span>
             Acessos
@@ -322,6 +338,128 @@
                   </tr>
                 </thead>
                 <tbody id="contasPagar-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="planoContas-view">
+          <div class="module-toolbar">
+            <input id="planoContas-search" type="search" placeholder="Buscar categoria" />
+            <button class="primary-button module-create" data-module="planoContas" type="button">Adicionar categoria</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Categoria</th>
+                    <th>Tipo</th>
+                    <th>Centro de custo</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="planoContas-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="contasBancarias-view">
+          <div class="module-toolbar">
+            <input id="contasBancarias-search" type="search" placeholder="Buscar conta bancaria" />
+            <button class="primary-button module-create" data-module="contasBancarias" type="button">Adicionar conta</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Conta</th>
+                    <th>Banco</th>
+                    <th>Tipo</th>
+                    <th class="align-right">Saldo atual</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="contasBancarias-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="movimentacoes-view">
+          <div class="module-toolbar">
+            <input id="movimentacoes-search" type="search" placeholder="Buscar movimentacao" />
+            <button class="primary-button module-create" data-module="movimentacoes" type="button">Nova movimentacao</button>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Descricao</th>
+                    <th>Conta</th>
+                    <th>Categoria</th>
+                    <th class="align-right">Valor</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="movimentacoes-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="fluxoCaixa-view">
+          <div class="metrics-grid finance-metrics">
+            <article class="metric-panel">
+              <span>Saldo inicial</span>
+              <strong id="cash-initial">R$ 0,00</strong>
+              <small>contas bancarias</small>
+            </article>
+            <article class="metric-panel">
+              <span>Entradas previstas</span>
+              <strong id="cash-planned-in">R$ 0,00</strong>
+              <small>a receber em aberto</small>
+            </article>
+            <article class="metric-panel">
+              <span>Saidas previstas</span>
+              <strong id="cash-planned-out">R$ 0,00</strong>
+              <small>a pagar em aberto</small>
+            </article>
+            <article class="metric-panel">
+              <span>Saldo projetado</span>
+              <strong id="cash-projected">R$ 0,00</strong>
+              <small>realizado + previsto</small>
+            </article>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Financeiro</p>
+                <h2>Movimentos do caixa</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Origem</th>
+                    <th>Descricao</th>
+                    <th>Conta</th>
+                    <th class="align-right">Entrada</th>
+                    <th class="align-right">Saida</th>
+                    <th class="align-right">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody id="fluxoCaixa-table"></tbody>
               </table>
             </div>
           </div>

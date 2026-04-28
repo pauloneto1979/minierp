@@ -5,14 +5,17 @@ const MIGRATION_ID_MAP_KEY = "minierp-supabase-id-map-v1";
 const DEFAULT_TENANT = "Minha Empresa LTDA";
 const DEFAULT_TENANT_DOCUMENT = "11.444.777/0001-61";
 const SUPABASE_CONFIG = window.MINIERP_CONFIG?.supabase || {};
-const onlineDataModules = ["clientes", "fornecedores", "produtos", "vendas", "contasReceber", "contasPagar"];
+const onlineDataModules = ["clientes", "fornecedores", "produtos", "vendas", "contasReceber", "contasPagar", "planoContas", "contasBancarias", "movimentacoes"];
 const supabaseTables = {
   clientes: "clientes",
   fornecedores: "fornecedores",
   produtos: "produtos",
   vendas: "vendas",
   contasReceber: "contas_receber",
-  contasPagar: "contas_pagar"
+  contasPagar: "contas_pagar",
+  planoContas: "plano_contas",
+  contasBancarias: "contas_bancarias",
+  movimentacoes: "movimentacoes_financeiras"
 };
 
 const makeId = () => {
@@ -33,7 +36,10 @@ const initialState = {
   produtos: [],
   vendas: [],
   contasReceber: [],
-  contasPagar: []
+  contasPagar: [],
+  planoContas: [],
+  contasBancarias: [],
+  movimentacoes: []
 };
 
 const initialAccessRegistry = {
@@ -43,37 +49,45 @@ const initialAccessRegistry = {
 
 const demoState = {
   clientes: [
-    { id: makeId(), nome: "Ana Souza", documento: "123.456.789-00", telefone: "(11) 98888-1010", cidade: "Sao Paulo", status: "Ativo" },
-    { id: makeId(), nome: "Mercado Central", documento: "12.345.678/0001-95", telefone: "(21) 3333-4400", cidade: "Rio de Janeiro", status: "Ativo" },
-    { id: makeId(), nome: "Oficina Lima", documento: "45.723.174/0001-10", telefone: "(31) 3444-9000", cidade: "Belo Horizonte", status: "Prospect" }
+    { id: makeUuid(), nome: "Ana Souza", documento: "123.456.789-00", telefone: "(11) 98888-1010", cidade: "Sao Paulo", status: "Ativo" },
+    { id: makeUuid(), nome: "Mercado Central", documento: "12.345.678/0001-95", telefone: "(21) 3333-4400", cidade: "Rio de Janeiro", status: "Ativo" },
+    { id: makeUuid(), nome: "Oficina Lima", documento: "45.723.174/0001-10", telefone: "(31) 3444-9000", cidade: "Belo Horizonte", status: "Prospect" }
   ],
   fornecedores: [
-    { id: makeId(), nome: "Imobiliaria Centro", documento: "04.252.011/0001-10", telefone: "(11) 3000-1000", cidade: "Sao Paulo", status: "Ativo" },
-    { id: makeId(), nome: "Operadora Fibra", documento: "11.222.333/0001-81", telefone: "(11) 4000-2020", cidade: "Campinas", status: "Ativo" }
+    { id: makeUuid(), nome: "Imobiliaria Centro", documento: "04.252.011/0001-10", telefone: "(11) 3000-1000", cidade: "Sao Paulo", status: "Ativo" },
+    { id: makeUuid(), nome: "Operadora Fibra", documento: "11.222.333/0001-81", telefone: "(11) 4000-2020", cidade: "Campinas", status: "Ativo" }
   ],
   produtos: [
-    { id: makeId(), nome: "Cadeira Operacional", categoria: "Moveis", preco: 420, estoque: 8, status: "Ativo" },
-    { id: makeId(), nome: "Monitor 24 polegadas", categoria: "Informatica", preco: 980, estoque: 3, status: "Ativo" },
-    { id: makeId(), nome: "Kit Expediente", categoria: "Suprimentos", preco: 75, estoque: 22, status: "Ativo" }
+    { id: makeUuid(), nome: "Cadeira Operacional", categoria: "Moveis", preco: 420, estoque: 8, status: "Ativo" },
+    { id: makeUuid(), nome: "Monitor 24 polegadas", categoria: "Informatica", preco: 980, estoque: 3, status: "Ativo" },
+    { id: makeUuid(), nome: "Kit Expediente", categoria: "Suprimentos", preco: 75, estoque: 22, status: "Ativo" }
   ],
   vendas: [],
   contasReceber: [],
-  contasPagar: []
+  contasPagar: [],
+  planoContas: [
+    { id: makeUuid(), nome: "Receita de vendas", tipo: "Receita", centroCusto: "Comercial", status: "Ativo" },
+    { id: makeUuid(), nome: "Fornecedores", tipo: "Despesa", centroCusto: "Administrativo", status: "Ativo" }
+  ],
+  contasBancarias: [
+    { id: makeUuid(), nome: "Caixa interno", banco: "Caixa", agencia: "", conta: "", tipo: "Caixa", saldoInicial: 0, status: "Ativa" }
+  ],
+  movimentacoes: []
 };
 
 demoState.vendas = [
-  { id: makeId(), data: today(), cliente: "Ana Souza", produto: "Cadeira Operacional", status: "Faturada", total: 840 },
-  { id: makeId(), data: today(-2), cliente: "Mercado Central", produto: "Kit Expediente", status: "Pendente", total: 375 }
+  { id: makeUuid(), data: today(), cliente: "Ana Souza", produto: "Cadeira Operacional", status: "Faturada", total: 840 },
+  { id: makeUuid(), data: today(-2), cliente: "Mercado Central", produto: "Kit Expediente", status: "Pendente", total: 375 }
 ];
 
 demoState.contasReceber = [
-  { id: makeId(), vencimento: today(5), descricao: "Venda Ana Souza", cliente: "Ana Souza", status: "Aberto", valor: 840 },
-  { id: makeId(), vencimento: today(-1), descricao: "Venda Mercado Central", cliente: "Mercado Central", status: "Recebido", valor: 375 }
+  { id: makeUuid(), emissao: today(-1), vencimento: today(5), documento: "VEN-001", parcela: "1/1", descricao: "Venda Ana Souza", cliente: "Ana Souza", categoria: "Receita de vendas", contaBancaria: "Caixa interno", forma: "PIX", status: "Aberto", valor: 840, juros: 0, multa: 0, desconto: 0, valorRecebido: 0, dataBaixa: "" },
+  { id: makeUuid(), emissao: today(-4), vencimento: today(-1), documento: "VEN-002", parcela: "1/1", descricao: "Venda Mercado Central", cliente: "Mercado Central", categoria: "Receita de vendas", contaBancaria: "Caixa interno", forma: "Transferencia", status: "Recebido", valor: 375, juros: 0, multa: 0, desconto: 0, valorRecebido: 375, dataBaixa: today(-1) }
 ];
 
 demoState.contasPagar = [
-  { id: makeId(), vencimento: today(10), descricao: "Aluguel sala", fornecedor: "Imobiliaria Centro", status: "Aberto", valor: 1200 },
-  { id: makeId(), vencimento: today(3), descricao: "Internet", fornecedor: "Operadora Fibra", status: "Aberto", valor: 149.9 }
+  { id: makeUuid(), emissao: today(), vencimento: today(10), documento: "ALU-001", parcela: "1/1", descricao: "Aluguel sala", fornecedor: "Imobiliaria Centro", categoria: "Fornecedores", contaBancaria: "Caixa interno", forma: "Boleto", status: "Aberto", valor: 1200, juros: 0, multa: 0, desconto: 0, valorPago: 0, dataBaixa: "" },
+  { id: makeUuid(), emissao: today(), vencimento: today(3), documento: "NET-001", parcela: "1/1", descricao: "Internet", fornecedor: "Operadora Fibra", categoria: "Fornecedores", contaBancaria: "Caixa interno", forma: "PIX", status: "Aberto", valor: 149.9, juros: 0, multa: 0, desconto: 0, valorPago: 0, dataBaixa: "" }
 ];
 
 const fields = {
@@ -106,18 +120,66 @@ const fields = {
     { name: "total", label: "Total", type: "number", step: "0.01", required: true }
   ],
   contasReceber: [
+    { name: "emissao", label: "Emissao", type: "date", required: true },
     { name: "vencimento", label: "Vencimento", type: "date", required: true },
+    { name: "documento", label: "Documento/NF", type: "text" },
+    { name: "parcela", label: "Parcela", type: "text" },
     { name: "descricao", label: "Descricao", type: "text", required: true },
     { name: "cliente", label: "Cliente", type: "select", relation: "clientes", required: true },
-    { name: "status", label: "Status", type: "select", options: ["Aberto", "Recebido", "Atrasado", "Cancelado"] },
-    { name: "valor", label: "Valor", type: "number", step: "0.01", required: true }
+    { name: "categoria", label: "Plano de contas", type: "select", relation: "planoContas" },
+    { name: "contaBancaria", label: "Conta bancaria", type: "select", relation: "contasBancarias" },
+    { name: "forma", label: "Forma", type: "select", options: ["PIX", "Boleto", "Cartao", "Dinheiro", "Transferencia"] },
+    { name: "status", label: "Status", type: "select", options: ["Aberto", "Recebido parcial", "Recebido", "Atrasado", "Cancelado"] },
+    { name: "valor", label: "Valor original", type: "number", step: "0.01", required: true },
+    { name: "juros", label: "Juros", type: "number", step: "0.01" },
+    { name: "multa", label: "Multa", type: "number", step: "0.01" },
+    { name: "desconto", label: "Desconto", type: "number", step: "0.01" },
+    { name: "valorRecebido", label: "Valor recebido", type: "number", step: "0.01" },
+    { name: "dataBaixa", label: "Data baixa", type: "date" }
   ],
   contasPagar: [
+    { name: "emissao", label: "Emissao", type: "date", required: true },
     { name: "vencimento", label: "Vencimento", type: "date", required: true },
+    { name: "documento", label: "Documento/NF", type: "text" },
+    { name: "parcela", label: "Parcela", type: "text" },
     { name: "descricao", label: "Descricao", type: "text", required: true },
     { name: "fornecedor", label: "Fornecedor", type: "select", relation: "fornecedores", required: true },
-    { name: "status", label: "Status", type: "select", options: ["Aberto", "Pago", "Atrasado", "Cancelado"] },
-    { name: "valor", label: "Valor", type: "number", step: "0.01", required: true }
+    { name: "categoria", label: "Plano de contas", type: "select", relation: "planoContas" },
+    { name: "contaBancaria", label: "Conta bancaria", type: "select", relation: "contasBancarias" },
+    { name: "forma", label: "Forma", type: "select", options: ["PIX", "Boleto", "Cartao", "Dinheiro", "Transferencia"] },
+    { name: "status", label: "Status", type: "select", options: ["Aberto", "Pago parcial", "Pago", "Atrasado", "Cancelado"] },
+    { name: "valor", label: "Valor original", type: "number", step: "0.01", required: true },
+    { name: "juros", label: "Juros", type: "number", step: "0.01" },
+    { name: "multa", label: "Multa", type: "number", step: "0.01" },
+    { name: "desconto", label: "Desconto", type: "number", step: "0.01" },
+    { name: "valorPago", label: "Valor pago", type: "number", step: "0.01" },
+    { name: "dataBaixa", label: "Data baixa", type: "date" }
+  ],
+  planoContas: [
+    { name: "nome", label: "Categoria", type: "text", required: true },
+    { name: "tipo", label: "Tipo", type: "select", options: ["Receita", "Despesa", "Transferencia"], required: true },
+    { name: "centroCusto", label: "Centro de custo", type: "text" },
+    { name: "status", label: "Status", type: "select", options: ["Ativo", "Inativo"] }
+  ],
+  contasBancarias: [
+    { name: "nome", label: "Conta", type: "text", required: true },
+    { name: "banco", label: "Banco", type: "text" },
+    { name: "agencia", label: "Agencia", type: "text" },
+    { name: "conta", label: "Numero", type: "text" },
+    { name: "tipo", label: "Tipo", type: "select", options: ["Conta corrente", "Poupanca", "Caixa", "Cartao"] },
+    { name: "saldoInicial", label: "Saldo inicial", type: "number", step: "0.01" },
+    { name: "status", label: "Status", type: "select", options: ["Ativa", "Inativa"] }
+  ],
+  movimentacoes: [
+    { name: "data", label: "Data", type: "date", required: true },
+    { name: "tipo", label: "Tipo", type: "select", options: ["Entrada", "Saida"], required: true },
+    { name: "descricao", label: "Descricao", type: "text", required: true },
+    { name: "contaBancaria", label: "Conta bancaria", type: "select", relation: "contasBancarias" },
+    { name: "categoria", label: "Plano de contas", type: "select", relation: "planoContas" },
+    { name: "centroCusto", label: "Centro de custo", type: "text" },
+    { name: "forma", label: "Forma", type: "select", options: ["PIX", "Boleto", "Cartao", "Dinheiro", "Transferencia"] },
+    { name: "valor", label: "Valor", type: "number", step: "0.01", required: true },
+    { name: "status", label: "Status", type: "select", options: ["Realizado", "Previsto", "Conciliado"] }
   ],
   empresas: [
     { name: "nome", label: "Empresa", type: "text", required: true },
@@ -140,6 +202,10 @@ const moduleNames = {
   vendas: "Vendas",
   contasReceber: "Contas a Receber",
   contasPagar: "Contas a Pagar",
+  planoContas: "Plano de Contas",
+  contasBancarias: "Contas Bancarias",
+  movimentacoes: "Movimentacoes",
+  fluxoCaixa: "Fluxo de Caixa",
   acessos: "Acessos",
   empresas: "Empresas",
   usuarios: "Usuarios autorizados"
@@ -203,7 +269,7 @@ document.querySelector("#seed-data").addEventListener("click", async () => {
 });
 
 document.querySelector("#open-create").addEventListener("click", () => {
-  const target = currentView === "dashboard" ? "contasReceber" : currentView === "acessos" ? "usuarios" : currentView;
+  const target = currentView === "dashboard" ? "contasReceber" : currentView === "acessos" ? "usuarios" : currentView === "fluxoCaixa" ? "movimentacoes" : currentView;
   openForm(target);
 });
 
@@ -411,8 +477,21 @@ function normalizeRecord(record, module) {
   if (module === "vendas") {
     record.total = Number(record.total || 0);
   }
-  if (module === "contasReceber" || module === "contasPagar") {
+  if (["contasReceber", "contasPagar"].includes(module)) {
+    ["valor", "juros", "multa", "desconto", "valorRecebido", "valorPago"].forEach((field) => {
+      if (field in record) record[field] = Number(record[field] || 0);
+    });
+    if (!record.emissao) record.emissao = today();
+    if (["Recebido", "Pago"].includes(record.status) && !record.dataBaixa) record.dataBaixa = today();
+    if (module === "contasReceber" && record.status === "Recebido" && !record.valorRecebido) record.valorRecebido = totalReceivable(record);
+    if (module === "contasPagar" && record.status === "Pago" && !record.valorPago) record.valorPago = totalPayable(record);
+  }
+  if (module === "contasBancarias") {
+    record.saldoInicial = Number(record.saldoInicial || 0);
+  }
+  if (module === "movimentacoes") {
     record.valor = Number(record.valor || 0);
+    if (!record.status) record.status = "Realizado";
   }
 }
 
@@ -446,6 +525,10 @@ function render() {
   renderVendas();
   renderContasReceber();
   renderContasPagar();
+  renderPlanoContas();
+  renderContasBancarias();
+  renderMovimentacoes();
+  renderFluxoCaixa();
   renderAcessos();
 }
 
@@ -554,10 +637,10 @@ function renderContasReceber() {
   const rows = state.contasReceber.filter((item) => matches(item, query)).map((entry) => `
     <tr>
       <td>${formatDate(entry.vencimento)}</td>
-      <td>${escapeHtml(entry.descricao)}</td>
+      <td>${escapeHtml(entry.descricao)}<br><small>${escapeHtml(entry.documento || "Sem documento")} ${escapeHtml(entry.parcela || "")}</small></td>
       <td>${escapeHtml(entry.cliente || "-")}</td>
       <td>${badge(entry.status)}</td>
-      <td class="align-right">${money(entry.valor)}</td>
+      <td class="align-right">${money(totalReceivable(entry))}</td>
       <td class="align-right">${rowActions("contasReceber", entry.id)}</td>
     </tr>
   `).join("");
@@ -569,14 +652,91 @@ function renderContasPagar() {
   const rows = state.contasPagar.filter((item) => matches(item, query)).map((entry) => `
     <tr>
       <td>${formatDate(entry.vencimento)}</td>
-      <td>${escapeHtml(entry.descricao)}</td>
+      <td>${escapeHtml(entry.descricao)}<br><small>${escapeHtml(entry.documento || "Sem documento")} ${escapeHtml(entry.parcela || "")}</small></td>
       <td>${escapeHtml(entry.fornecedor || "-")}</td>
       <td>${badge(entry.status)}</td>
-      <td class="align-right">${money(entry.valor)}</td>
+      <td class="align-right">${money(totalPayable(entry))}</td>
       <td class="align-right">${rowActions("contasPagar", entry.id)}</td>
     </tr>
   `).join("");
   document.querySelector("#contasPagar-table").innerHTML = rows || emptyRow(6, "Nenhuma conta a pagar encontrada.");
+}
+
+function renderPlanoContas() {
+  const query = getQuery("planoContas");
+  const rows = state.planoContas.filter((item) => matches(item, query)).map((account) => `
+    <tr>
+      <td>${escapeHtml(account.nome)}</td>
+      <td>${badge(account.tipo, account.tipo === "Receita" ? "success" : account.tipo === "Despesa" ? "danger" : "warn")}</td>
+      <td>${escapeHtml(account.centroCusto || "-")}</td>
+      <td>${badge(account.status)}</td>
+      <td class="align-right">${rowActions("planoContas", account.id)}</td>
+    </tr>
+  `).join("");
+  document.querySelector("#planoContas-table").innerHTML = rows || emptyRow(5, "Nenhuma categoria cadastrada.");
+}
+
+function renderContasBancarias() {
+  const query = getQuery("contasBancarias");
+  const rows = state.contasBancarias.filter((item) => matches(item, query)).map((account) => `
+    <tr>
+      <td>${escapeHtml(account.nome)}</td>
+      <td>${escapeHtml(account.banco || "-")}</td>
+      <td>${escapeHtml(account.tipo || "-")}</td>
+      <td class="align-right">${money(bankBalance(account.nome))}</td>
+      <td>${badge(account.status)}</td>
+      <td class="align-right">${rowActions("contasBancarias", account.id)}</td>
+    </tr>
+  `).join("");
+  document.querySelector("#contasBancarias-table").innerHTML = rows || emptyRow(6, "Nenhuma conta bancaria cadastrada.");
+}
+
+function renderMovimentacoes() {
+  const query = getQuery("movimentacoes");
+  const rows = state.movimentacoes.filter((item) => matches(item, query)).map((movement) => `
+    <tr>
+      <td>${formatDate(movement.data)}</td>
+      <td>${badge(movement.tipo, movement.tipo === "Entrada" ? "success" : "danger")}</td>
+      <td>${escapeHtml(movement.descricao)}</td>
+      <td>${escapeHtml(movement.contaBancaria || "-")}</td>
+      <td>${escapeHtml(movement.categoria || "-")}</td>
+      <td class="align-right">${money(movement.valor)}</td>
+      <td>${badge(movement.status || "Realizado")}</td>
+      <td class="align-right">${rowActions("movimentacoes", movement.id)}</td>
+    </tr>
+  `).join("");
+  document.querySelector("#movimentacoes-table").innerHTML = rows || emptyRow(8, "Nenhuma movimentacao encontrada.");
+}
+
+function renderFluxoCaixa() {
+  const initialBalance = state.contasBancarias.reduce((sum, account) => sum + Number(account.saldoInicial || 0), 0);
+  const realizedIn = state.movimentacoes.filter((item) => item.tipo === "Entrada").reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const realizedOut = state.movimentacoes.filter((item) => item.tipo === "Saida").reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const plannedIn = state.contasReceber.filter((item) => !["Recebido", "Cancelado"].includes(item.status)).reduce((sum, item) => sum + totalReceivable(item), 0);
+  const plannedOut = state.contasPagar.filter((item) => !["Pago", "Cancelado"].includes(item.status)).reduce((sum, item) => sum + totalPayable(item), 0);
+  const projected = initialBalance + realizedIn - realizedOut + plannedIn - plannedOut;
+
+  document.querySelector("#cash-initial").textContent = money(initialBalance);
+  document.querySelector("#cash-planned-in").textContent = money(plannedIn);
+  document.querySelector("#cash-planned-out").textContent = money(plannedOut);
+  document.querySelector("#cash-projected").textContent = money(projected);
+
+  let runningBalance = initialBalance;
+  const rows = cashFlowRows().map((item) => {
+    runningBalance += item.tipo === "Entrada" ? item.valor : -item.valor;
+    return `
+      <tr>
+        <td>${formatDate(item.data)}</td>
+        <td>${escapeHtml(item.origem)}</td>
+        <td>${escapeHtml(item.descricao)}</td>
+        <td>${escapeHtml(item.contaBancaria || "-")}</td>
+        <td class="align-right">${item.tipo === "Entrada" ? money(item.valor) : "-"}</td>
+        <td class="align-right">${item.tipo === "Saida" ? money(item.valor) : "-"}</td>
+        <td class="align-right">${money(runningBalance)}</td>
+      </tr>
+    `;
+  }).join("");
+  document.querySelector("#fluxoCaixa-table").innerHTML = rows || emptyRow(7, "Nenhum movimento financeiro encontrado.");
 }
 
 function renderAcessos() {
@@ -671,7 +831,7 @@ function relatedOptions(module, currentValue) {
   }
 
   const options = getModuleCollection(module)
-    .filter((item) => item.status !== "Inativo" && item.status !== "Suspenso")
+    .filter((item) => !["Inativo", "Inativa", "Suspenso", "Suspensa"].includes(item.status))
     .map((item) => item.nome || item.usuario)
     .filter(Boolean);
   if (currentValue && !options.includes(currentValue)) {
@@ -705,6 +865,56 @@ function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function totalReceivable(entry) {
+  return Number(entry.valor || 0) + Number(entry.juros || 0) + Number(entry.multa || 0) - Number(entry.desconto || 0);
+}
+
+function totalPayable(entry) {
+  return Number(entry.valor || 0) + Number(entry.juros || 0) + Number(entry.multa || 0) - Number(entry.desconto || 0);
+}
+
+function bankBalance(accountName) {
+  const account = state.contasBancarias.find((item) => sameText(item.nome, accountName));
+  const initial = Number(account?.saldoInicial || 0);
+  return state.movimentacoes
+    .filter((movement) => sameText(movement.contaBancaria, accountName) && movement.status !== "Previsto")
+    .reduce((balance, movement) => balance + (movement.tipo === "Entrada" ? Number(movement.valor || 0) : -Number(movement.valor || 0)), initial);
+}
+
+function cashFlowRows() {
+  const realized = state.movimentacoes.map((movement) => ({
+    data: movement.data,
+    origem: movement.origem || "Movimento",
+    descricao: movement.descricao,
+    contaBancaria: movement.contaBancaria,
+    tipo: movement.tipo,
+    valor: Number(movement.valor || 0)
+  }));
+  const plannedReceivables = state.contasReceber
+    .filter((entry) => !["Recebido", "Cancelado"].includes(entry.status))
+    .map((entry) => ({
+      data: entry.vencimento,
+      origem: "A receber",
+      descricao: entry.descricao,
+      contaBancaria: entry.contaBancaria,
+      tipo: "Entrada",
+      valor: totalReceivable(entry)
+    }));
+  const plannedPayables = state.contasPagar
+    .filter((entry) => !["Pago", "Cancelado"].includes(entry.status))
+    .map((entry) => ({
+      data: entry.vencimento,
+      origem: "A pagar",
+      descricao: entry.descricao,
+      contaBancaria: entry.contaBancaria,
+      tipo: "Saida",
+      valor: totalPayable(entry)
+    }));
+  return [...realized, ...plannedReceivables, ...plannedPayables]
+    .filter((item) => item.data && item.valor)
+    .sort((left, right) => left.data.localeCompare(right.data));
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
@@ -727,6 +937,9 @@ function loadState() {
 }
 
 function migrateState(savedState) {
+  Object.keys(initialState).forEach((module) => {
+    if (!Array.isArray(savedState[module])) savedState[module] = [];
+  });
   if (Array.isArray(savedState.clientes)) {
     savedState.clientes = savedState.clientes.map((client) => ({
       ...client,
@@ -749,6 +962,34 @@ function migrateState(savedState) {
       .filter((item) => item.tipo === "Saida")
       .map(({ tipo, ...item }) => ({ ...item, fornecedor: item.fornecedor || "Fornecedor nao informado" }));
   }
+  savedState.contasReceber = savedState.contasReceber.map((entry) => ({
+    ...entry,
+    emissao: entry.emissao || entry.vencimento || today(),
+    documento: entry.documento || "",
+    parcela: entry.parcela || "1/1",
+    categoria: entry.categoria || "",
+    contaBancaria: entry.contaBancaria || "",
+    forma: entry.forma || "",
+    juros: Number(entry.juros || 0),
+    multa: Number(entry.multa || 0),
+    desconto: Number(entry.desconto || 0),
+    valorRecebido: Number(entry.valorRecebido || 0),
+    dataBaixa: entry.dataBaixa || ""
+  }));
+  savedState.contasPagar = savedState.contasPagar.map((entry) => ({
+    ...entry,
+    emissao: entry.emissao || entry.vencimento || today(),
+    documento: entry.documento || "",
+    parcela: entry.parcela || "1/1",
+    categoria: entry.categoria || "",
+    contaBancaria: entry.contaBancaria || "",
+    forma: entry.forma || "",
+    juros: Number(entry.juros || 0),
+    multa: Number(entry.multa || 0),
+    desconto: Number(entry.desconto || 0),
+    valorPago: Number(entry.valorPago || 0),
+    dataBaixa: entry.dataBaixa || ""
+  }));
   delete savedState.financeiro;
   return savedState;
 }
@@ -776,8 +1017,10 @@ async function saveModuleCollection(module) {
     saveAccessRegistry();
     return;
   }
+  const movementUpdated = syncFinancialMovement(module);
   if (usesOnlineData(module)) {
     await saveOnlineModule(module);
+    if (movementUpdated) await saveOnlineModule("movimentacoes");
     return;
   }
   saveState();
@@ -792,6 +1035,51 @@ function closeMenuOnMobile() {
 
 function saveState() {
   localStorage.setItem(storageKeyForTenant(activeTenantKey), JSON.stringify(state));
+}
+
+function syncFinancialMovement(module) {
+  if (!["contasReceber", "contasPagar"].includes(module)) return false;
+  let changed = false;
+  const isReceivable = module === "contasReceber";
+  const paidStatus = isReceivable ? "Recebido" : "Pago";
+  const entries = getModuleCollection(module);
+
+  entries.forEach((entry) => {
+    const existingIndex = state.movimentacoes.findIndex((movement) => movement.origemId === entry.id && movement.origem === module);
+    if (entry.status !== paidStatus && existingIndex >= 0) {
+      state.movimentacoes.splice(existingIndex, 1);
+      changed = true;
+      return;
+    }
+    if (entry.status !== paidStatus) return;
+
+    const movement = {
+      id: existingIndex >= 0 ? state.movimentacoes[existingIndex].id : makeUuid(),
+      origem: module,
+      origemId: entry.id,
+      data: entry.dataBaixa || today(),
+      tipo: isReceivable ? "Entrada" : "Saida",
+      descricao: entry.descricao,
+      contaBancaria: entry.contaBancaria || "",
+      categoria: entry.categoria || "",
+      centroCusto: costCenterByCategory(entry.categoria),
+      forma: entry.forma || "",
+      valor: isReceivable ? Number(entry.valorRecebido || totalReceivable(entry)) : Number(entry.valorPago || totalPayable(entry)),
+      status: "Realizado"
+    };
+
+    if (existingIndex >= 0) {
+      state.movimentacoes[existingIndex] = movement;
+    } else {
+      state.movimentacoes.push(movement);
+    }
+    changed = true;
+  });
+  return changed;
+}
+
+function costCenterByCategory(category) {
+  return state.planoContas.find((item) => sameText(item.nome, category))?.centroCusto || "";
 }
 
 function usesOnlineData(module) {
@@ -1162,10 +1450,14 @@ async function supabaseDelete(table, params) {
 async function loadOnlineState() {
   const nextState = structuredClone(initialState);
   await Promise.all(onlineDataModules.map(async (module) => {
-    nextState[module] = await supabaseGetMany(supabaseTables[module], {
-      empresa_documento: `eq.${activeTenantDocument}`,
-      select: "*"
-    });
+    try {
+      nextState[module] = await supabaseGetMany(supabaseTables[module], {
+        empresa_documento: `eq.${activeTenantDocument}`,
+        select: "*"
+      });
+    } catch {
+      nextState[module] = [];
+    }
   }));
   return nextState;
 }
@@ -1194,7 +1486,14 @@ async function deleteModuleRecord(module, id, removedRecord) {
     return;
   }
 
+  if (["contasReceber", "contasPagar"].includes(module)) {
+    state.movimentacoes = state.movimentacoes.filter((movement) => movement.origemId !== id);
+  }
+
   if (usesOnlineData(module)) {
+    if (["contasReceber", "contasPagar"].includes(module)) {
+      await supabaseDelete("movimentacoes_financeiras", { origemId: `eq.${id}` });
+    }
     await supabaseDelete(supabaseTables[module], {
       id: `eq.${id}`,
       empresa_documento: `eq.${activeTenantDocument}`
@@ -1227,10 +1526,10 @@ function mergeOnlineCompanies(companies) {
 function bootstrapAccessRegistry(username, tenant, password) {
   accessRegistry = {
     empresas: [
-      { id: makeId(), nome: tenant, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" }
+      { id: makeUuid(), nome: tenant, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" }
     ],
     usuarios: [
-      { id: makeId(), usuario: username, senha: password, empresas: [DEFAULT_TENANT_DOCUMENT], perfil: "Administrador", status: "Ativo" }
+      { id: makeUuid(), usuario: username, senha: password, empresas: [DEFAULT_TENANT_DOCUMENT], perfil: "Administrador", status: "Ativo" }
     ]
   };
   saveAccessRegistry();
@@ -1258,7 +1557,7 @@ function ensureDefaultCompany() {
     return company;
   }
 
-  company = { id: makeId(), nome: DEFAULT_TENANT, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" };
+  company = { id: makeUuid(), nome: DEFAULT_TENANT, documento: DEFAULT_TENANT_DOCUMENT, status: "Ativa" };
   accessRegistry.empresas.push(company);
   return company;
 }
@@ -1535,3 +1834,4 @@ function escapeAttr(value) {
 }
 
 initLogin();
+
