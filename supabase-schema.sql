@@ -37,3 +37,69 @@ cross join empresas e
 where u.usuario = 'admin'
   and e.documento = '11.444.777/0001-61'
 on conflict do nothing;
+
+create table if not exists clientes (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  nome text not null,
+  documento text not null,
+  telefone text,
+  cidade text,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists fornecedores (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  nome text not null,
+  documento text not null,
+  telefone text,
+  cidade text,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists produtos (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  nome text not null,
+  categoria text,
+  preco numeric not null default 0,
+  estoque numeric not null default 0,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists vendas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  data date not null,
+  cliente text not null,
+  produto text not null,
+  status text not null default 'Pendente',
+  total numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists contas_receber (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  vencimento date not null,
+  descricao text not null,
+  cliente text not null,
+  status text not null default 'Aberto',
+  valor numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists contas_pagar (
+  id uuid primary key default gen_random_uuid(),
+  empresa_documento text not null,
+  vencimento date not null,
+  descricao text not null,
+  fornecedor text not null,
+  status text not null default 'Aberto',
+  valor numeric not null default 0,
+  created_at timestamptz not null default now()
+);

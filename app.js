@@ -1,13 +1,30 @@
 const STORAGE_KEY = "minierp-state-v1";
 const REMEMBERED_LOGIN_KEY = "minierp-remembered-login";
 const ACCESS_REGISTRY_KEY = "minierp-access-registry-v1";
+const MIGRATION_ID_MAP_KEY = "minierp-supabase-id-map-v1";
 const DEFAULT_TENANT = "Minha Empresa LTDA";
 const DEFAULT_TENANT_DOCUMENT = "11.444.777/0001-61";
 const SUPABASE_CONFIG = window.MINIERP_CONFIG?.supabase || {};
+const onlineDataModules = ["clientes", "fornecedores", "produtos", "vendas", "contasReceber", "contasPagar"];
+const supabaseTables = {
+  clientes: "clientes",
+  fornecedores: "fornecedores",
+  produtos: "produtos",
+  vendas: "vendas",
+  contasReceber: "contas_receber",
+  contasPagar: "contas_pagar"
+};
 
 const makeId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const makeUuid = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (Number(char) ^ Math.random() * 16 >> Number(char) / 4).toString(16)
+  );
 };
 
 const initialState = {
@@ -159,6 +176,7 @@ const activeTenantName = document.querySelector("#active-tenant-name");
 const tenantSwitcher = document.querySelector("#tenant-switcher");
 const menuToggle = document.querySelector("#menu-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+const migrateLocalButton = document.querySelector("#migrate-local-data");
 
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
@@ -174,10 +192,34 @@ menuToggle.addEventListener("click", () => {
 
 sidebarBackdrop.addEventListener("click", closeMenuOnMobile);
 
-document.querySelector("#seed-data").addEventListener("click", () => {
+document.querySelector("#seed-data").addEventListener("click", async () => {
   state = structuredClone(demoState);
-  saveState();
+  if (isSupabaseConfigured()) {
+    await Promise.all(onlineDataModules.map((module) => saveOnlineModule(module)));
+  } else {
+    saveState();
+  }
   render();
+});
+
+migrateLocalButton.addEventListener("click", async () => {
+  migrateLocalButton.disabled = true;
+  const originalText = migrateLocalButton.textContent;
+  migrateLocalButton.textContent = "Migrando...";
+  try {
+    const migrated = await migrateLocalDataToSupabase();
+    migrateLocalButton.textContent = migrated ? "Migrado" : "Sem dados locais";
+    setTimeout(() => {
+      migrateLocalButton.textContent = originalText;
+      migrateLocalButton.disabled = false;
+    }, 1800);
+  } catch {
+    migrateLocalButton.textContent = "Falha ao migrar";
+    setTimeout(() => {
+      migrateLocalButton.textContent = originalText;
+      migrateLocalButton.disabled = false;
+    }, 2200);
+  }
 });
 
 document.querySelector("#open-create").addEventListener("click", () => {
@@ -230,25 +272,25 @@ loginForm.addEventListener("submit", async (event) => {
   pendingLogin = { username, password, companies: accessCheck.companies };
   loginError.textContent = "";
   if (accessCheck.companies.length === 1) {
-    completeLogin(accessCheck.companies[0]);
+    await completeLogin(accessCheck.companies[0]);
     return;
   }
 
   showTenantSelection(accessCheck.companies);
 });
 
-tenantForm.addEventListener("submit", (event) => {
+tenantForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!pendingLogin || !tenantSelect.value) {
     tenantError.textContent = "Selecione uma empresa.";
     return;
   }
-  completeLogin(tenantSelect.value);
+  await completeLogin(tenantSelect.value);
 });
 
-tenantSwitcher.addEventListener("change", () => {
+tenantSwitcher.addEventListener("change", async () => {
   if (tenantSwitcher.value) {
-    setTenant(tenantSwitcher.value);
+    await setTenant(tenantSwitcher.value);
   }
 });
 
@@ -268,7 +310,7 @@ document.querySelector("#logout-button").addEventListener("click", () => {
   loginPassword.focus();
 });
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   if (event.submitter?.value === "cancel") {
     return;
   }
@@ -283,15 +325,22 @@ form.addEventListener("submit", (event) => {
   }
 
   const collection = getModuleCollection(editing.module);
+  const previousCollection = collection;
   if (editing.id) {
     setModuleCollection(editing.module, collection.map((item) =>
       item.id === editing.id ? { ...item, ...record } : item
     ));
   } else {
-    setModuleCollection(editing.module, [...collection, { id: makeId(), ...record }]);
+    setModuleCollection(editing.module, [...collection, { id: usesOnlineData(editing.module) ? makeUuid() : makeId(), ...record }]);
   }
 
-  saveModuleCollection(editing.module);
+  try {
+    await saveModuleCollection(editing.module);
+  } catch {
+    setModuleCollection(editing.module, previousCollection);
+    dialogError.textContent = "Nao foi possivel salvar no banco online.";
+    return;
+  }
   dialog.close();
   render();
 });
@@ -585,11 +634,15 @@ function rowActions(module, id) {
   `;
 }
 
-function removeRecord(module, id) {
+async function removeRecord(module, id) {
   const collection = getModuleCollection(module);
   const nextCollection = collection.filter((item) => item.id !== id);
   setModuleCollection(module, nextCollection);
-  saveModuleCollection(module);
+  try {
+    await deleteModuleRecord(module, id);
+  } catch {
+    setModuleCollection(module, collection);
+  }
   render();
 }
 
@@ -705,9 +758,13 @@ function setModuleCollection(module, collection) {
   state[module] = collection;
 }
 
-function saveModuleCollection(module) {
+async function saveModuleCollection(module) {
   if (module === "empresas" || module === "usuarios") {
     saveAccessRegistry();
+    return;
+  }
+  if (usesOnlineData(module)) {
+    await saveOnlineModule(module);
     return;
   }
   saveState();
@@ -722,6 +779,86 @@ function closeMenuOnMobile() {
 
 function saveState() {
   localStorage.setItem(storageKeyForTenant(activeTenantKey), JSON.stringify(state));
+}
+
+function usesOnlineData(module) {
+  return isSupabaseConfigured() && onlineDataModules.includes(module);
+}
+
+async function migrateLocalDataToSupabase() {
+  if (!isSupabaseConfigured()) return false;
+  const localState = loadLocalStateForActiveTenant();
+  const hasLocalRecords = onlineDataModules.some((module) => localState[module]?.length);
+  if (!hasLocalRecords) return false;
+
+  const previousState = state;
+  try {
+    state = normalizeLocalStateForSupabase(localState);
+    await Promise.all(onlineDataModules.map((module) => saveOnlineModule(module)));
+    state = await loadOnlineState();
+    render();
+  } catch (error) {
+    state = previousState;
+    throw error;
+  }
+  return true;
+}
+
+function loadLocalStateForActiveTenant() {
+  const candidateKeys = [
+    storageKeyForTenant(activeTenantKey),
+    storageKeyForTenant(tenantKey(activeTenant)),
+    storageKeyForTenant(tenantKey(activeTenantDocument)),
+    STORAGE_KEY
+  ];
+  const mergedState = structuredClone(initialState);
+  candidateKeys.forEach((key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const savedState = migrateState({ ...structuredClone(initialState), ...JSON.parse(raw) });
+      onlineDataModules.forEach((module) => {
+        savedState[module].forEach((record) => {
+          if (!mergedState[module].some((item) => sameText(item.id, record.id))) {
+            mergedState[module].push(record);
+          }
+        });
+      });
+    } catch {
+      // Ignore unreadable legacy entries and keep migrating the rest.
+    }
+  });
+  return mergedState;
+}
+
+function normalizeLocalStateForSupabase(localState) {
+  const idMap = loadMigrationIdMap();
+  const nextState = structuredClone(initialState);
+  onlineDataModules.forEach((module) => {
+    nextState[module] = localState[module].map((record) => {
+      const legacyId = `${module}:${String(record.id || makeId())}`;
+      const mappedId = idMap[legacyId] || makeUuid();
+      idMap[legacyId] = mappedId;
+      const { empresa_documento, created_at, ...cleanRecord } = record;
+      return { ...cleanRecord, id: mappedId };
+    });
+  });
+  saveMigrationIdMap(idMap);
+  return nextState;
+}
+
+function loadMigrationIdMap() {
+  const raw = localStorage.getItem(MIGRATION_ID_MAP_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function saveMigrationIdMap(idMap) {
+  localStorage.setItem(MIGRATION_ID_MAP_KEY, JSON.stringify(idMap));
 }
 
 function loadAccessRegistry() {
@@ -855,6 +992,76 @@ async function supabaseGetMany(table, params) {
   }
 
   return response.json();
+}
+
+async function supabaseUpsert(table, rows) {
+  const baseUrl = SUPABASE_CONFIG.url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+  const response = await fetch(`${baseUrl}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_CONFIG.anonKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates"
+    },
+    body: JSON.stringify(rows)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supabase upsert failed: ${response.status}`);
+  }
+}
+
+async function supabaseDelete(table, params) {
+  const baseUrl = SUPABASE_CONFIG.url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+  const url = new URL(`${baseUrl}/rest/v1/${table}`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      apikey: SUPABASE_CONFIG.anonKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supabase delete failed: ${response.status}`);
+  }
+}
+
+async function loadOnlineState() {
+  const nextState = structuredClone(initialState);
+  await Promise.all(onlineDataModules.map(async (module) => {
+    nextState[module] = await supabaseGetMany(supabaseTables[module], {
+      empresa_documento: `eq.${activeTenantDocument}`,
+      select: "*"
+    });
+  }));
+  return nextState;
+}
+
+async function saveOnlineModule(module) {
+  const table = supabaseTables[module];
+  const rows = getModuleCollection(module).map((item) => ({
+    ...item,
+    empresa_documento: activeTenantDocument
+  }));
+  if (rows.length) {
+    await supabaseUpsert(table, rows);
+  }
+}
+
+async function deleteModuleRecord(module, id) {
+  if (usesOnlineData(module)) {
+    await supabaseDelete(supabaseTables[module], {
+      id: `eq.${id}`,
+      empresa_documento: `eq.${activeTenantDocument}`
+    });
+    return;
+  }
+
+  saveModuleCollection(module);
 }
 
 function mergeOnlineCompanies(companies) {
@@ -1049,12 +1256,20 @@ function loadRememberedLogin() {
   }
 }
 
-function setTenant(tenantName) {
+async function setTenant(tenantName) {
   const company = companyByDocument(tenantName);
   activeTenantDocument = company?.documento || tenantName;
   activeTenant = company?.nome || tenantName;
   activeTenantKey = tenantKey(company?.documento || tenantName);
-  state = loadState();
+  if (usesOnlineData("clientes")) {
+    try {
+      state = await loadOnlineState();
+    } catch {
+      state = loadState();
+    }
+  } else {
+    state = loadState();
+  }
   setView("dashboard");
   render();
 }
@@ -1084,6 +1299,7 @@ function showApp() {
   loginScreen.classList.add("is-hidden");
   tenantScreen.classList.add("is-hidden");
   appShell.classList.remove("is-hidden");
+  migrateLocalButton.classList.toggle("is-hidden", !isSupabaseConfigured());
   const shouldOpenMenu = !window.matchMedia("(max-width: 980px)").matches;
   appShell.classList.toggle("menu-open", shouldOpenMenu);
   menuToggle.setAttribute("aria-expanded", String(shouldOpenMenu));
@@ -1099,9 +1315,9 @@ function showTenantSelection(companies) {
   tenantSelect.focus();
 }
 
-function completeLogin(tenant) {
+async function completeLogin(tenant) {
   sessionCompanies = pendingLogin?.companies || [tenant];
-  setTenant(tenant);
+  await setTenant(tenant);
   if (rememberLogin.checked && pendingLogin) {
     localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({
       username: pendingLogin.username,
