@@ -543,6 +543,7 @@ select {
 
 select {
   width: 100%;
+  text-overflow: ellipsis;
 }
 
 input:focus,
@@ -642,6 +643,11 @@ dialog::backdrop {
 .option-check {
   color: var(--ink);
   font-weight: 600;
+  min-width: 0;
+}
+
+.option-label {
+  max-width: 100%;
 }
 
 .empty-inline {

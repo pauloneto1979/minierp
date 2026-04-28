@@ -359,7 +359,7 @@ function fieldTemplate(field, value = "") {
     const options = relatedOptions(field.relation, "").map((option) => `
       <label class="check-field option-check">
         <input name="${field.name}" type="checkbox" value="${escapeAttr(option.value || option)}" ${selectedValues.includes(option.value || option) ? "checked" : ""} />
-        <span>${escapeHtml(option.label || option)}</span>
+        <span class="truncate-text option-label" title="${escapeAttr(option.fullLabel || option.label || option)}">${escapeHtml(option.shortLabel || option.label || option)}</span>
       </label>
     `).join("");
     return `
@@ -377,7 +377,8 @@ function fieldTemplate(field, value = "") {
       .map((option) => {
         const optionValue = option.value || option;
         const optionLabel = option.label || option;
-        return `<option value="${escapeAttr(optionValue)}" ${optionValue === value ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`;
+        const optionDisplay = option.shortLabel || optionLabel;
+        return `<option value="${escapeAttr(optionValue)}" title="${escapeAttr(optionLabel)}" ${optionValue === value ? "selected" : ""}>${escapeHtml(optionDisplay)}</option>`;
       })
       .join("");
     return `<label class="field"><span>${field.label}</span><select name="${field.name}" ${required}>${placeholder}${options}</select></label>`;
@@ -682,13 +683,22 @@ function relatedOptions(module, currentValue) {
 function relatedCompanyOptions(currentValue) {
   const options = accessRegistry.empresas
     .filter((company) => company.status === "Ativa")
-    .map((company) => ({ label: company.nome, value: company.documento }))
+    .map((company) => companyOption(company.nome, company.documento))
     .filter((company) => company.value);
   if (currentValue && !options.some((company) => company.value === currentValue)) {
     const company = companyByDocument(currentValue);
-    options.push({ label: company?.nome || currentValue, value: currentValue });
+    options.push(companyOption(company?.nome || currentValue, currentValue));
   }
   return options;
+}
+
+function companyOption(name, value) {
+  return {
+    label: name,
+    fullLabel: name,
+    shortLabel: compactCompanyName(name),
+    value
+  };
 }
 
 function money(value) {
@@ -1261,6 +1271,12 @@ function companyNameByDocument(document) {
   return companyByDocument(document)?.nome || document;
 }
 
+function compactCompanyName(name, maxLength = 38) {
+  const value = String(name || "").trim();
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trim()}...`;
+}
+
 function companyDocumentFromReference(reference, companies, legacyCompanyDocuments) {
   const normalizedReference = normalizeDocument(reference);
   const formattedReference = normalizeCompanyDocument(reference);
@@ -1437,7 +1453,10 @@ function showApp() {
 
 function showTenantSelection(companies) {
   tenantSelect.innerHTML = companies
-    .map((companyDocument) => `<option value="${escapeAttr(companyDocument)}">${escapeHtml(companyNameByDocument(companyDocument))}</option>`)
+    .map((companyDocument) => {
+      const companyName = companyNameByDocument(companyDocument);
+      return `<option value="${escapeAttr(companyDocument)}" title="${escapeAttr(companyName)}">${escapeHtml(compactCompanyName(companyName, 42))}</option>`;
+    })
     .join("");
   tenantError.textContent = "";
   loginScreen.classList.add("is-hidden");
@@ -1494,7 +1513,10 @@ function renderTenantSwitcher() {
   const availableCompanies = sessionCompanies.filter((companyDocument) => companyByDocument(companyDocument)?.status === "Ativa");
   tenantContainer.classList.toggle("has-switcher", availableCompanies.length > 1);
   tenantSwitcher.innerHTML = availableCompanies
-    .map((companyDocument) => `<option value="${escapeAttr(companyDocument)}" ${sameText(companyDocument, activeTenantDocument) ? "selected" : ""}>${escapeHtml(companyNameByDocument(companyDocument))}</option>`)
+    .map((companyDocument) => {
+      const companyName = companyNameByDocument(companyDocument);
+      return `<option value="${escapeAttr(companyDocument)}" title="${escapeAttr(companyName)}" ${sameText(companyDocument, activeTenantDocument) ? "selected" : ""}>${escapeHtml(compactCompanyName(companyName, 30))}</option>`;
+    })
     .join("");
 }
 
