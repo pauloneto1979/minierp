@@ -839,7 +839,8 @@ async function supabaseGetSingle(table, params) {
 }
 
 async function supabaseGetMany(table, params) {
-  const url = new URL(`${SUPABASE_CONFIG.url.replace(/\/$/, "")}/rest/v1/${table}`);
+  const baseUrl = SUPABASE_CONFIG.url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+  const url = new URL(`${baseUrl}/rest/v1/${table}`);
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
 
   const response = await fetch(url, {
