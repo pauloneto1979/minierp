@@ -75,6 +75,12 @@ button {
   width: min(260px, 100%);
 }
 
+.app-version {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .sidebar-logo {
   width: 132px;
   filter: brightness(0) invert(1);
@@ -442,6 +448,43 @@ th {
 
 td {
   color: #263229;
+}
+
+.truncate-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.company-name-cell {
+  max-width: min(520px, 42vw);
+}
+
+.company-chip-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(680px, 56vw);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.company-chip {
+  max-width: 220px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef4f0;
+  color: #1e3a2c;
+  font-size: 0.9rem;
+}
+
+.muted-chip {
+  flex: 0 0 auto;
+  background: #f4f0e8;
+  color: var(--muted);
 }
 
 tr:last-child td {

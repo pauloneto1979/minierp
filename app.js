@@ -587,7 +587,7 @@ function renderEmpresas() {
   const query = getQuery("empresas");
   const rows = accessRegistry.empresas.filter((item) => matches(item, query)).map((company) => `
     <tr>
-      <td>${escapeHtml(company.nome)}</td>
+      <td><span class="truncate-text company-name-cell" title="${escapeAttr(company.nome)}">${escapeHtml(company.nome)}</span></td>
       <td>${escapeHtml(company.documento ? formatCnpj(company.documento) : "-")}</td>
       <td>${badge(company.status)}</td>
       <td class="align-right">${rowActions("empresas", company.id)}</td>
@@ -601,13 +601,26 @@ function renderUsuarios() {
   const rows = accessRegistry.usuarios.filter((item) => matches(item, query)).map((user) => `
     <tr>
       <td>${escapeHtml(user.usuario)}</td>
-      <td>${escapeHtml(userCompanies(user).map(companyNameByDocument).join(", ") || "-")}</td>
+      <td>${companyLinksTemplate(userCompanies(user))}</td>
       <td>${escapeHtml(user.perfil || "-")}</td>
       <td>${badge(user.status)}</td>
       <td class="align-right">${rowActions("usuarios", user.id)}</td>
     </tr>
   `).join("");
   document.querySelector("#usuarios-table").innerHTML = rows || emptyRow(5, "Nenhum usuario autorizado.");
+}
+
+function companyLinksTemplate(companyDocuments) {
+  const companyNames = companyDocuments.map(companyNameByDocument).filter(Boolean);
+  if (!companyNames.length) return "-";
+  const visibleCompanies = companyNames.slice(0, 3);
+  const remaining = companyNames.length - visibleCompanies.length;
+  const fullTitle = companyNames.join(", ");
+  const chips = visibleCompanies.map((name) =>
+    `<span class="company-chip truncate-text" title="${escapeAttr(name)}">${escapeHtml(name)}</span>`
+  ).join("");
+  const moreChip = remaining > 0 ? `<span class="company-chip muted-chip" title="${escapeAttr(fullTitle)}">+${remaining}</span>` : "";
+  return `<div class="company-chip-list" title="${escapeAttr(fullTitle)}">${chips}${moreChip}</div>`;
 }
 
 function rowActions(module, id) {
