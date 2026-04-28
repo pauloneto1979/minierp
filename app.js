@@ -176,7 +176,6 @@ const activeTenantName = document.querySelector("#active-tenant-name");
 const tenantSwitcher = document.querySelector("#tenant-switcher");
 const menuToggle = document.querySelector("#menu-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
-const migrateLocalButton = document.querySelector("#migrate-local-data");
 
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
@@ -200,26 +199,6 @@ document.querySelector("#seed-data").addEventListener("click", async () => {
     saveState();
   }
   render();
-});
-
-migrateLocalButton.addEventListener("click", async () => {
-  migrateLocalButton.disabled = true;
-  const originalText = migrateLocalButton.textContent;
-  migrateLocalButton.textContent = "Migrando...";
-  try {
-    const migrated = await migrateLocalDataToSupabase();
-    migrateLocalButton.textContent = migrated ? "Migrado" : "Sem dados locais";
-    setTimeout(() => {
-      migrateLocalButton.textContent = originalText;
-      migrateLocalButton.disabled = false;
-    }, 1800);
-  } catch {
-    migrateLocalButton.textContent = "Falha ao migrar";
-    setTimeout(() => {
-      migrateLocalButton.textContent = originalText;
-      migrateLocalButton.disabled = false;
-    }, 2200);
-  }
 });
 
 document.querySelector("#open-create").addEventListener("click", () => {
@@ -1363,7 +1342,6 @@ function showApp() {
   loginScreen.classList.add("is-hidden");
   tenantScreen.classList.add("is-hidden");
   appShell.classList.remove("is-hidden");
-  migrateLocalButton.classList.toggle("is-hidden", !isSupabaseConfigured());
   const shouldOpenMenu = !window.matchMedia("(max-width: 980px)").matches;
   appShell.classList.toggle("menu-open", shouldOpenMenu);
   menuToggle.setAttribute("aria-expanded", String(shouldOpenMenu));
