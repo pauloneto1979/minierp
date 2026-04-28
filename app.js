@@ -153,6 +153,7 @@ let accessRegistry = loadAccessRegistry();
 let currentView = "dashboard";
 let editing = { module: null, id: null };
 let pendingLogin = null;
+let currentUsername = "";
 let sessionCompanies = [];
 let cnpjLookupTimer = null;
 let lastCnpjLookupKey = "";
@@ -305,6 +306,7 @@ form.addEventListener("submit", async (event) => {
 
   const collection = getModuleCollection(editing.module);
   const previousCollection = collection;
+  const previousAccessRegistry = structuredClone(accessRegistry);
   if (editing.id) {
     setModuleCollection(editing.module, collection.map((item) =>
       item.id === editing.id ? { ...item, ...record } : item
@@ -315,8 +317,10 @@ form.addEventListener("submit", async (event) => {
 
   try {
     await saveModuleCollection(editing.module);
+    refreshCurrentSessionCompanies();
   } catch {
     setModuleCollection(editing.module, previousCollection);
+    accessRegistry = previousAccessRegistry;
     dialogError.textContent = "Nao foi possivel salvar no banco online.";
     return;
   }
@@ -615,12 +619,16 @@ function rowActions(module, id) {
 
 async function removeRecord(module, id) {
   const collection = getModuleCollection(module);
+  const removedRecord = collection.find((item) => item.id === id);
   const nextCollection = collection.filter((item) => item.id !== id);
+  const previousAccessRegistry = structuredClone(accessRegistry);
   setModuleCollection(module, nextCollection);
   try {
-    await deleteModuleRecord(module, id);
+    await deleteModuleRecord(module, id, removedRecord);
+    refreshCurrentSessionCompanies();
   } catch {
     setModuleCollection(module, collection);
+    accessRegistry = previousAccessRegistry;
   }
   render();
 }
@@ -739,6 +747,9 @@ function setModuleCollection(module, collection) {
 
 async function saveModuleCollection(module) {
   if (module === "empresas" || module === "usuarios") {
+    if (isSupabaseConfigured()) {
+      await saveOnlineAccessRegistry(module);
+    }
     saveAccessRegistry();
     return;
   }
@@ -790,6 +801,11 @@ async function migrateLocalDataToSupabase() {
 }
 
 async function migrateAccessRegistryToSupabase() {
+  await saveOnlineAccessRegistry("empresas");
+  await saveOnlineAccessRegistry("usuarios");
+}
+
+async function saveOnlineAccessRegistry(module) {
   const companiesPayload = accessRegistry.empresas
     .map((company) => ({
       nome: company.nome,
@@ -806,6 +822,13 @@ async function migrateAccessRegistryToSupabase() {
       status: user.status || "Ativo"
     }))
     .filter((user) => user.usuario && user.senha);
+
+  if (module === "empresas" && companiesPayload.length) {
+    await supabaseUpsert("empresas", companiesPayload, { onConflict: "documento" });
+    return;
+  }
+
+  if (module !== "usuarios") return;
 
   const onlineCompanies = companiesPayload.length
     ? await supabaseUpsert("empresas", companiesPayload, { onConflict: "documento", returnRows: true })
@@ -829,9 +852,49 @@ async function migrateAccessRegistryToSupabase() {
     });
   });
 
+  await Promise.all(onlineUsers.map((user) =>
+    supabaseDelete("usuario_empresas", { usuario_id: `eq.${user.id}` })
+  ));
+
   if (links.length) {
     await supabaseUpsert("usuario_empresas", links, { onConflict: "usuario_id,empresa_id" });
   }
+}
+
+async function loadOnlineAccessRegistry() {
+  const [companies, users, links] = await Promise.all([
+    supabaseGetMany("empresas", { select: "id,nome,documento,status" }),
+    supabaseGetMany("usuarios", { select: "id,usuario,senha,perfil,status" }),
+    supabaseGetMany("usuario_empresas", { select: "usuario_id,empresa_id" })
+  ]);
+
+  const companyDocumentsById = new Map(companies.map((company) => [company.id, normalizeCompanyDocument(company.documento)]));
+  const companyLinksByUserId = new Map();
+  links.forEach((link) => {
+    const companyDocument = companyDocumentsById.get(link.empresa_id);
+    if (!companyDocument) return;
+    const currentLinks = companyLinksByUserId.get(link.usuario_id) || [];
+    currentLinks.push(companyDocument);
+    companyLinksByUserId.set(link.usuario_id, currentLinks);
+  });
+
+  accessRegistry = migrateAccessRegistry({
+    empresas: companies.map((company) => ({
+      id: company.id,
+      nome: company.nome,
+      documento: normalizeCompanyDocument(company.documento),
+      status: company.status
+    })),
+    usuarios: users.map((user) => ({
+      id: user.id,
+      usuario: user.usuario,
+      senha: user.senha,
+      perfil: user.perfil,
+      status: user.status,
+      empresas: companyLinksByUserId.get(user.id) || []
+    }))
+  });
+  saveAccessRegistry();
 }
 
 function loadLocalStateForActiveTenant() {
@@ -1095,7 +1158,19 @@ async function saveOnlineModule(module) {
   }
 }
 
-async function deleteModuleRecord(module, id) {
+async function deleteModuleRecord(module, id, removedRecord) {
+  if (module === "empresas" || module === "usuarios") {
+    if (isSupabaseConfigured() && removedRecord) {
+      if (module === "empresas") {
+        await supabaseDelete("empresas", { documento: `eq.${normalizeCompanyDocument(removedRecord.documento)}` });
+      } else {
+        await supabaseDelete("usuarios", { usuario: `eq.${removedRecord.usuario}` });
+      }
+    }
+    saveAccessRegistry();
+    return;
+  }
+
   if (usesOnlineData(module)) {
     await supabaseDelete(supabaseTables[module], {
       id: `eq.${id}`,
@@ -1358,8 +1433,19 @@ function showTenantSelection(companies) {
 }
 
 async function completeLogin(tenant) {
+  currentUsername = pendingLogin?.username || currentUsername;
   sessionCompanies = pendingLogin?.companies || [tenant];
   await setTenant(tenant);
+  if (isSupabaseConfigured()) {
+    try {
+      await saveOnlineAccessRegistry("empresas");
+      await saveOnlineAccessRegistry("usuarios");
+      await loadOnlineAccessRegistry();
+      refreshCurrentSessionCompanies();
+    } catch {
+      // Keep the session available even if the access registry cannot refresh now.
+    }
+  }
   if (rememberLogin.checked && pendingLogin) {
     localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({
       username: pendingLogin.username,
@@ -1370,6 +1456,24 @@ async function completeLogin(tenant) {
   }
   pendingLogin = null;
   showApp();
+  render();
+}
+
+function refreshCurrentSessionCompanies() {
+  if (!currentUsername) return;
+  const currentUser = accessRegistry.usuarios.find((user) => sameText(user.usuario, currentUsername));
+  if (!currentUser) return;
+  const availableCompanies = userCompanies(currentUser).filter((companyDocument) =>
+    accessRegistry.empresas.some((company) => sameText(company.documento, companyDocument) && company.status === "Ativa")
+  );
+  if (!availableCompanies.length) return;
+  sessionCompanies = availableCompanies;
+  if (!sessionCompanies.some((companyDocument) => sameText(companyDocument, activeTenantDocument))) {
+    const company = companyByDocument(sessionCompanies[0]);
+    activeTenantDocument = company?.documento || sessionCompanies[0];
+    activeTenant = company?.nome || sessionCompanies[0];
+    activeTenantKey = tenantKey(activeTenantDocument);
+  }
 }
 
 function renderTenantSwitcher() {
